@@ -90,6 +90,14 @@ export async function batchDeleteApiKeys(
   return res.data
 }
 
+export async function batchUpdateApiKeyGroup(
+  ids: number[],
+  group: string
+): Promise<ApiResponse<number>> {
+  const res = await api.put('/api/token/batch/group', { ids, group })
+  return res.data
+}
+
 // Update API key status (enable/disable)
 export async function updateApiKeyStatus(
   id: number,

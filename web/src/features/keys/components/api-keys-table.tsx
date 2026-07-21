@@ -55,6 +55,7 @@ import {
 import type { ApiKey } from '../types'
 import { ApiKeyCell, UnlimitedQuotaBadge } from './api-keys-cells'
 import { useApiKeysColumns } from './api-keys-columns'
+import { ApiKeysGroupSwitcher } from './api-keys-group-switcher'
 import { useApiKeys } from './api-keys-provider'
 import { DataTableBulkActions } from './data-table-bulk-actions'
 import { DataTableRowActions } from './data-table-row-actions'
@@ -324,6 +325,7 @@ export function ApiKeysTable() {
             singleSelect: true,
           },
         ],
+        preActions: <ApiKeysGroupSwitcher table={table} />,
       }}
       mobile={<ApiKeysMobileList table={table} isLoading={isLoading} />}
       getRowClassName={(row) =>

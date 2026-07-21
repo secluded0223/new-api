@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
@@ -314,6 +315,39 @@ func UpdateToken(c *gin.Context) {
 
 type TokenBatch struct {
 	Ids []int `json:"ids"`
+}
+
+type TokenBatchGroup struct {
+	Ids   []int  `json:"ids"`
+	Group string `json:"group"`
+}
+
+func BatchUpdateTokenGroup(c *gin.Context) {
+	tokenBatch := TokenBatchGroup{}
+	if err := c.ShouldBindJSON(&tokenBatch); err != nil || len(tokenBatch.Ids) == 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	tokenBatch.Group = strings.TrimSpace(tokenBatch.Group)
+	userId := c.GetInt("id")
+	userGroup, err := model.GetUserGroup(userId, false)
+	if err != nil || !service.GroupInUserUsableGroups(userGroup, tokenBatch.Group) {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	count, err := model.BatchUpdateTokenGroup(tokenBatch.Ids, userId, tokenBatch.Group)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    count,
+	})
 }
 
 func DeleteTokenBatch(c *gin.Context) {

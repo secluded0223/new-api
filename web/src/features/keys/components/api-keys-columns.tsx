@@ -190,6 +190,17 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
       size: 170,
     },
     {
+      accessorKey: 'used_quota',
+      header: t('Used'),
+      cell: ({ row }) => (
+        <span className='font-medium tabular-nums'>
+          {formatQuota(row.getValue('used_quota'))}
+        </span>
+      ),
+      size: 120,
+      meta: { mobileHidden: true },
+    },
+    {
       accessorKey: 'group',
       header: t('Group'),
       cell: ({ row }) => {

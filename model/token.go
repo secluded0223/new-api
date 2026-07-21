@@ -480,6 +480,50 @@ func BatchDeleteTokens(ids []int, userId int) (int, error) {
 	return len(tokens), nil
 }
 
+func BatchUpdateTokenGroup(ids []int, userId int, group string) (int, error) {
+	if len(ids) == 0 {
+		return 0, errors.New("ids 不能为空！")
+	}
+
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return 0, tx.Error
+	}
+
+	var tokens []Token
+	if err := tx.Select("id", commonKeyCol).
+		Where("user_id = ? AND id IN (?)", userId, ids).
+		Find(&tokens).Error; err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+
+	updates := map[string]interface{}{"group": group}
+	if group != "auto" {
+		updates["cross_group_retry"] = false
+	}
+	if err := tx.Model(&Token{}).
+		Where("user_id = ? AND id IN (?)", userId, ids).
+		Updates(updates).Error; err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return 0, err
+	}
+
+	if common.RedisEnabled {
+		gopool.Go(func() {
+			if err := invalidateTokensCache(tokens); err != nil {
+				common.SysLog("failed to invalidate token cache after batch group update: " + err.Error())
+			}
+		})
+	}
+
+	return len(tokens), nil
+}
+
 func GetTokenKeysByIds(ids []int, userId int) ([]Token, error) {
 	var tokens []Token
 	err := DB.Select("id", commonKeyCol).
