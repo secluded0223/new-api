@@ -2,7 +2,6 @@ package common
 
 import (
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -42,15 +41,15 @@ func TestAttachRequestBodyAuditCompactsCodexStyleInput(t *testing.T) {
 	RequestBodyLogEnabled = true
 	t.Cleanup(func() { RequestBodyLogEnabled = previousEnabled })
 
-	messages := make([]string, 0, requestBodyAuditMaxListItems+2)
-	for i := 0; i < requestBodyAuditMaxListItems+2; i++ {
-		messages = append(messages, `{"role":"user","content":[{"type":"input_text","text":"message `+strconv.Itoa(i)+`"}],"id":"msg_`+strconv.Itoa(i)+`"}`)
-	}
 	requestBody := []byte(`{
 		"client_metadata":{"x-codex-turn-metadata":"private session data"},
 		"include":["reasoning.encrypted_content"],
 		"model":"gpt-test",
-		"input":[` + strings.Join(messages, ",") + `]
+		"input":[
+			{"role":"user","content":[{"type":"input_text","text":"old user message"}],"id":"msg_old"},
+			{"role":"assistant","content":[{"type":"output_text","text":"assistant context"}],"id":"msg_assistant"},
+			{"role":"user","content":[{"type":"input_text","text":"current user message"}],"id":"msg_current"}
+		]
 	}`)
 	context, _ := gin.CreateTestContext(httptest.NewRecorder())
 	context.Set(KeyRequestBody, requestBody)
@@ -60,11 +59,13 @@ func TestAttachRequestBodyAuditCompactsCodexStyleInput(t *testing.T) {
 
 	adminInfo := other["admin_info"].(map[string]interface{})
 	storedBody := adminInfo["request_body"].(string)
-	assert.Contains(t, storedBody, `"_omitted_previous_items":2`)
-	assert.Contains(t, storedBody, `"text":"message 13"`)
+	assert.Contains(t, storedBody, `"text":"current user message"`)
+	assert.NotContains(t, storedBody, "old user message")
+	assert.NotContains(t, storedBody, "assistant context")
 	assert.NotContains(t, storedBody, "private session data")
 	assert.NotContains(t, storedBody, "reasoning.encrypted_content")
-	assert.NotContains(t, storedBody, `"id":"msg_13"`)
+	assert.NotContains(t, storedBody, `"id":"msg_current"`)
+	assert.Equal(t, true, adminInfo["request_body_truncated"])
 }
 
 func TestAttachRequestBodyAuditHonorsDisabledSetting(t *testing.T) {

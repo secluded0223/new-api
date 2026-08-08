@@ -12,7 +12,6 @@ const (
 	RequestBodyAuditMaxSourceBytes = 1 << 20
 	RequestBodyAuditMaxStoredBytes = 16 << 10
 	requestBodyAuditMaxStringBytes = 2 << 10
-	requestBodyAuditMaxListItems   = 12
 )
 
 var requestBodyAuditSensitiveKeys = map[string]struct{}{
@@ -160,23 +159,21 @@ func sanitizeRequestBodyAuditValue(value interface{}, key string, truncated *boo
 }
 
 func sanitizeRequestBodyAuditList(values []interface{}, truncated *bool) []interface{} {
-	startIndex := 0
-	if len(values) > requestBodyAuditMaxListItems {
-		startIndex = len(values) - requestBodyAuditMaxListItems
+	if len(values) == 0 {
+		return values
+	}
+
+	selectedIndex := len(values) - 1
+	for index := len(values) - 1; index >= 0; index-- {
+		if requestBodyAuditMessageRole(values[index]) == "user" {
+			selectedIndex = index
+			break
+		}
+	}
+	if len(values) > 1 {
 		*truncated = true
 	}
-
-	result := make([]interface{}, 0, len(values)-startIndex+1)
-	if startIndex > 0 {
-		result = append(result, map[string]interface{}{
-			"_omitted_previous_items": startIndex,
-		})
-	}
-
-	for _, value := range values[startIndex:] {
-		result = append(result, sanitizeRequestBodyAuditMessage(value, truncated))
-	}
-	return result
+	return []interface{}{sanitizeRequestBodyAuditMessage(values[selectedIndex], truncated)}
 }
 
 func sanitizeRequestBodyAuditMessage(value interface{}, truncated *bool) interface{} {
@@ -195,6 +192,18 @@ func sanitizeRequestBodyAuditMessage(value interface{}, truncated *bool) interfa
 		return sanitizeRequestBodyAuditValue(value, "", truncated)
 	}
 	return compact
+}
+
+func requestBodyAuditMessageRole(value interface{}) string {
+	message, ok := value.(map[string]interface{})
+	if !ok {
+		return ""
+	}
+	role, ok := message["role"].(string)
+	if !ok {
+		return ""
+	}
+	return strings.ToLower(role)
 }
 
 func truncateUTF8Bytes(value string, limit int) string {
