@@ -44,11 +44,12 @@ func TestAttachRequestBodyAuditCompactsCodexStyleInput(t *testing.T) {
 	requestBody := []byte(`{
 		"client_metadata":{"x-codex-turn-metadata":"private session data"},
 		"include":["reasoning.encrypted_content"],
+		"instructions":"system and developer instructions",
 		"model":"gpt-test",
 		"input":[
 			{"role":"user","content":[{"type":"input_text","text":"old user message"}],"id":"msg_old"},
 			{"role":"assistant","content":[{"type":"output_text","text":"assistant context"}],"id":"msg_assistant"},
-			{"role":"user","content":[{"type":"input_text","text":"current user message"}],"id":"msg_current"}
+			{"role":"user","content":[{"type":"input_text","text":"<in-app-browser-context source=\"ambient-ui-state\">browser details</in-app-browser-context>\n\n## My request:\ncurrent user message"}],"id":"msg_current"}
 		]
 	}`)
 	context, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -64,8 +65,38 @@ func TestAttachRequestBodyAuditCompactsCodexStyleInput(t *testing.T) {
 	assert.NotContains(t, storedBody, "assistant context")
 	assert.NotContains(t, storedBody, "private session data")
 	assert.NotContains(t, storedBody, "reasoning.encrypted_content")
+	assert.NotContains(t, storedBody, "system and developer instructions")
+	assert.NotContains(t, storedBody, "in-app-browser-context")
+	assert.NotContains(t, storedBody, "My request")
+	assert.NotContains(t, storedBody, "client_metadata")
+	assert.NotContains(t, storedBody, "include")
+	assert.NotContains(t, storedBody, "instructions")
 	assert.NotContains(t, storedBody, `"id":"msg_current"`)
 	assert.Equal(t, true, adminInfo["request_body_truncated"])
+}
+
+func TestAttachRequestBodyAuditRemovesAmbientContextWithoutRequestMarker(t *testing.T) {
+	previousEnabled := RequestBodyLogEnabled
+	RequestBodyLogEnabled = true
+	t.Cleanup(func() { RequestBodyLogEnabled = previousEnabled })
+
+	requestBody := []byte(`{
+		"model":"gpt-test",
+		"input":[
+			{"role":"user","content":[{"type":"input_text","text":"<in-app-browser-context source=\"ambient-ui-state\">browser details</in-app-browser-context>\ncurrent request"}]}
+		]
+	}`)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Set(KeyRequestBody, requestBody)
+	other := map[string]interface{}{}
+
+	AttachRequestBodyAudit(context, other)
+
+	adminInfo := other["admin_info"].(map[string]interface{})
+	storedBody := adminInfo["request_body"].(string)
+	assert.Contains(t, storedBody, `"text":"current request"`)
+	assert.NotContains(t, storedBody, "browser details")
+	assert.NotContains(t, storedBody, "in-app-browser-context")
 }
 
 func TestAttachRequestBodyAuditKeepsCurrentInputFromLargeRequest(t *testing.T) {

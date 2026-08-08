@@ -38,6 +38,12 @@ var requestBodyAuditOmittedKeys = map[string]struct{}{
 	"client_metadata":   {},
 	"encrypted_content": {},
 	"include":           {},
+	"instructions":      {},
+}
+
+var requestBodyAuditUserRequestMarkers = []string{
+	"## My request for Codex:",
+	"## My request:",
 }
 
 func AttachRequestBodyAudit(c *gin.Context, other map[string]interface{}) {
@@ -119,7 +125,8 @@ func sanitizeRequestBodyAuditValue(value interface{}, key string, truncated *boo
 		for key, child := range typedValue {
 			normalizedKey := strings.ReplaceAll(strings.ToLower(key), "-", "_")
 			if _, omitted := requestBodyAuditOmittedKeys[normalizedKey]; omitted {
-				typedValue[key] = "[omitted]"
+				delete(typedValue, key)
+				*truncated = true
 				continue
 			}
 			_, sensitive := requestBodyAuditSensitiveKeys[normalizedKey]
@@ -185,6 +192,9 @@ func sanitizeRequestBodyAuditMessage(value interface{}, truncated *bool) interfa
 	compact := make(map[string]interface{})
 	for _, key := range []string{"role", "type", "name", "content", "text", "prompt"} {
 		if child, exists := message[key]; exists {
+			if key == "content" || key == "text" || key == "prompt" {
+				child = sanitizeRequestBodyAuditUserContent(child, truncated)
+			}
 			compact[key] = sanitizeRequestBodyAuditValue(child, key, truncated)
 		}
 	}
@@ -192,6 +202,54 @@ func sanitizeRequestBodyAuditMessage(value interface{}, truncated *bool) interfa
 		return sanitizeRequestBodyAuditValue(value, "", truncated)
 	}
 	return compact
+}
+
+func sanitizeRequestBodyAuditUserContent(value interface{}, truncated *bool) interface{} {
+	switch typedValue := value.(type) {
+	case string:
+		sanitizedValue := typedValue
+		markerIndex := -1
+		markerLength := 0
+		for _, marker := range requestBodyAuditUserRequestMarkers {
+			if index := strings.LastIndex(sanitizedValue, marker); index > markerIndex {
+				markerIndex = index
+				markerLength = len(marker)
+			}
+		}
+		if markerIndex >= 0 {
+			sanitizedValue = sanitizedValue[markerIndex+markerLength:]
+		} else {
+			const contextStart = "<in-app-browser-context"
+			const contextEnd = "</in-app-browser-context>"
+			for {
+				startIndex := strings.Index(sanitizedValue, contextStart)
+				if startIndex < 0 {
+					break
+				}
+				endOffset := strings.Index(sanitizedValue[startIndex:], contextEnd)
+				if endOffset < 0 {
+					sanitizedValue = sanitizedValue[:startIndex]
+					break
+				}
+				endIndex := startIndex + endOffset + len(contextEnd)
+				sanitizedValue = sanitizedValue[:startIndex] + sanitizedValue[endIndex:]
+			}
+		}
+		sanitizedValue = strings.TrimSpace(sanitizedValue)
+		if sanitizedValue != typedValue {
+			*truncated = true
+		}
+		return sanitizedValue
+	case []interface{}:
+		for index, child := range typedValue {
+			typedValue[index] = sanitizeRequestBodyAuditUserContent(child, truncated)
+		}
+	case map[string]interface{}:
+		for key, child := range typedValue {
+			typedValue[key] = sanitizeRequestBodyAuditUserContent(child, truncated)
+		}
+	}
+	return value
 }
 
 func requestBodyAuditMessageRole(value interface{}) string {
