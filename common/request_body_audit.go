@@ -74,7 +74,8 @@ func AttachRequestBodyAudit(c *gin.Context, other map[string]interface{}) {
 	}
 
 	truncated := false
-	sanitizedBody, err := Marshal(sanitizeRequestBodyAuditValue(payload, "", &truncated))
+	compactPayload := compactRequestBodyAuditPayload(payload, &truncated)
+	sanitizedBody, err := Marshal(sanitizeRequestBodyAuditValue(compactPayload, "", &truncated))
 	if err != nil {
 		return
 	}
@@ -88,6 +89,38 @@ func AttachRequestBodyAudit(c *gin.Context, other map[string]interface{}) {
 	if truncated {
 		adminInfo["request_body_truncated"] = true
 	}
+}
+
+func compactRequestBodyAuditPayload(payload interface{}, truncated *bool) interface{} {
+	request, ok := payload.(map[string]interface{})
+	if !ok {
+		return payload
+	}
+
+	for _, key := range []string{"messages", "input"} {
+		if values, ok := request[key].([]interface{}); ok && len(values) > 0 {
+			message, ok := requestBodyAuditCurrentMessage(values).(map[string]interface{})
+			if !ok {
+				continue
+			}
+			for _, contentKey := range []string{"content", "text", "prompt"} {
+				if content, exists := message[contentKey]; exists {
+					return map[string]interface{}{
+						"content": compactRequestBodyAuditUserContent(content, truncated),
+					}
+				}
+			}
+		}
+	}
+
+	for _, key := range []string{"input", "prompt"} {
+		if content, exists := request[key]; exists {
+			return map[string]interface{}{
+				"content": compactRequestBodyAuditUserContent(content, truncated),
+			}
+		}
+	}
+	return payload
 }
 
 func cachedRequestBody(c *gin.Context) ([]byte, int64, bool) {
@@ -170,17 +203,10 @@ func sanitizeRequestBodyAuditList(values []interface{}, truncated *bool) []inter
 		return values
 	}
 
-	selectedIndex := len(values) - 1
-	for index := len(values) - 1; index >= 0; index-- {
-		if requestBodyAuditMessageRole(values[index]) == "user" {
-			selectedIndex = index
-			break
-		}
-	}
 	if len(values) > 1 {
 		*truncated = true
 	}
-	return []interface{}{sanitizeRequestBodyAuditMessage(values[selectedIndex], truncated)}
+	return []interface{}{sanitizeRequestBodyAuditMessage(requestBodyAuditCurrentMessage(values), truncated)}
 }
 
 func sanitizeRequestBodyAuditMessage(value interface{}, truncated *bool) interface{} {
@@ -193,7 +219,7 @@ func sanitizeRequestBodyAuditMessage(value interface{}, truncated *bool) interfa
 	for _, key := range []string{"role", "type", "name", "content", "text", "prompt"} {
 		if child, exists := message[key]; exists {
 			if key == "content" || key == "text" || key == "prompt" {
-				child = sanitizeRequestBodyAuditUserContent(child, truncated)
+				child = compactRequestBodyAuditUserContent(child, truncated)
 			}
 			compact[key] = sanitizeRequestBodyAuditValue(child, key, truncated)
 		}
@@ -202,6 +228,35 @@ func sanitizeRequestBodyAuditMessage(value interface{}, truncated *bool) interfa
 		return sanitizeRequestBodyAuditValue(value, "", truncated)
 	}
 	return compact
+}
+
+func compactRequestBodyAuditUserContent(value interface{}, truncated *bool) interface{} {
+	sanitizedValue := sanitizeRequestBodyAuditUserContent(value, truncated)
+	parts, ok := sanitizedValue.([]interface{})
+	if !ok {
+		return sanitizedValue
+	}
+
+	textParts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		switch typedPart := part.(type) {
+		case string:
+			if typedPart != "" {
+				textParts = append(textParts, typedPart)
+			}
+		case map[string]interface{}:
+			for _, key := range []string{"text", "content", "prompt"} {
+				if text, ok := typedPart[key].(string); ok && text != "" {
+					textParts = append(textParts, text)
+					break
+				}
+			}
+		}
+	}
+	if len(textParts) == 0 {
+		return sanitizedValue
+	}
+	return strings.Join(textParts, "\n")
 }
 
 func sanitizeRequestBodyAuditUserContent(value interface{}, truncated *bool) interface{} {
@@ -236,9 +291,6 @@ func sanitizeRequestBodyAuditUserContent(value interface{}, truncated *bool) int
 			}
 		}
 		sanitizedValue = strings.TrimSpace(sanitizedValue)
-		if sanitizedValue != typedValue {
-			*truncated = true
-		}
 		return sanitizedValue
 	case []interface{}:
 		for index, child := range typedValue {
@@ -250,6 +302,17 @@ func sanitizeRequestBodyAuditUserContent(value interface{}, truncated *bool) int
 		}
 	}
 	return value
+}
+
+func requestBodyAuditCurrentMessage(values []interface{}) interface{} {
+	selectedIndex := len(values) - 1
+	for index := len(values) - 1; index >= 0; index-- {
+		if requestBodyAuditMessageRole(values[index]) == "user" {
+			selectedIndex = index
+			break
+		}
+	}
+	return values[selectedIndex]
 }
 
 func requestBodyAuditMessageRole(value interface{}) string {

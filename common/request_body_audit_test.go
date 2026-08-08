@@ -27,13 +27,8 @@ func TestAttachRequestBodyAuditSanitizesAdminOnlyContent(t *testing.T) {
 	require.True(t, ok)
 	storedBody, ok := adminInfo["request_body"].(string)
 	require.True(t, ok)
-	assert.Contains(t, storedBody, `"content":"hello"`)
-	assert.NotContains(t, storedBody, "secret-key")
-	assert.NotContains(t, storedBody, "secret-token")
-	assert.NotContains(t, storedBody, "refresh-secret")
-	assert.Contains(t, storedBody, `"api_key":"[redacted]"`)
-	assert.Contains(t, storedBody, `"image":"[binary data omitted]"`)
-	assert.Contains(t, storedBody, `"data":"[binary data omitted]"`)
+	assert.Equal(t, `{"content":"hello"}`, storedBody)
+	assert.NotContains(t, adminInfo, "request_body_truncated")
 }
 
 func TestAttachRequestBodyAuditCompactsCodexStyleInput(t *testing.T) {
@@ -60,7 +55,7 @@ func TestAttachRequestBodyAuditCompactsCodexStyleInput(t *testing.T) {
 
 	adminInfo := other["admin_info"].(map[string]interface{})
 	storedBody := adminInfo["request_body"].(string)
-	assert.Contains(t, storedBody, `"text":"current user message"`)
+	assert.Equal(t, `{"content":"current user message"}`, storedBody)
 	assert.NotContains(t, storedBody, "old user message")
 	assert.NotContains(t, storedBody, "assistant context")
 	assert.NotContains(t, storedBody, "private session data")
@@ -72,7 +67,7 @@ func TestAttachRequestBodyAuditCompactsCodexStyleInput(t *testing.T) {
 	assert.NotContains(t, storedBody, "include")
 	assert.NotContains(t, storedBody, "instructions")
 	assert.NotContains(t, storedBody, `"id":"msg_current"`)
-	assert.Equal(t, true, adminInfo["request_body_truncated"])
+	assert.NotContains(t, adminInfo, "request_body_truncated")
 }
 
 func TestAttachRequestBodyAuditRemovesAmbientContextWithoutRequestMarker(t *testing.T) {
@@ -94,7 +89,7 @@ func TestAttachRequestBodyAuditRemovesAmbientContextWithoutRequestMarker(t *test
 
 	adminInfo := other["admin_info"].(map[string]interface{})
 	storedBody := adminInfo["request_body"].(string)
-	assert.Contains(t, storedBody, `"text":"current request"`)
+	assert.Equal(t, `{"content":"current request"}`, storedBody)
 	assert.NotContains(t, storedBody, "browser details")
 	assert.NotContains(t, storedBody, "in-app-browser-context")
 }
@@ -120,7 +115,7 @@ func TestAttachRequestBodyAuditKeepsCurrentInputFromLargeRequest(t *testing.T) {
 	adminInfo := other["admin_info"].(map[string]interface{})
 	storedBody, ok := adminInfo["request_body"].(string)
 	require.True(t, ok)
-	assert.Contains(t, storedBody, `"text":"current request"`)
+	assert.Equal(t, `{"content":"current request"}`, storedBody)
 	assert.NotEqual(t, "too_large", adminInfo["request_body_omitted_reason"])
 }
 
