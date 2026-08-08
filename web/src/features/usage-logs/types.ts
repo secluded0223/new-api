@@ -126,6 +126,9 @@ export interface LogOtherData {
     admin_id?: number | string
     admin_role?: number
     auth_method?: 'session' | 'access_token' | string
+    request_body?: string
+    request_body_truncated?: boolean
+    request_body_omitted_reason?: 'too_large' | 'invalid_json'
     // Quota saturation marker: set when a quota conversion clamped at the
     // int32 bound (overflow/underflow) or hit a NaN fallback while computing
     // this request's charge. Admin-only (nested under admin_info).

@@ -16,14 +16,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQueryClient, useIsFetching } from '@tanstack/react-query'
+import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import type { Table } from '@tanstack/react-table'
 import { Eye, EyeOff } from 'lucide-react'
-import { useState, useCallback, useMemo } from 'react'
+import { Fragment, useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
+import { ComboboxInput } from '@/components/ui/combobox-input'
 import {
   Select,
   SelectContent,
@@ -37,9 +38,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { getApiKeys } from '@/features/keys/api'
 
 import { LOG_TYPE_ALL_VALUE, LOG_TYPE_FILTERS } from '../constants'
+import {
+  COMMON_LOG_PRIMARY_FILTER_ORDER,
+  type CommonLogPrimaryFilterId,
+} from '../lib/common-log-filter-layout'
 import { buildSearchParams } from '../lib/filter'
+import { buildTokenFilterOptions } from '../lib/token-filter-options'
 import { getDefaultTimeRange } from '../lib/utils'
 import type { CommonLogFilters } from '../types'
 import { CommonLogsStats } from './common-logs-stats'
@@ -119,6 +126,29 @@ export function CommonLogsFilterBar<TData>(
   const { isAdminView: isAdmin } = useLogsViewScope()
   const { sensitiveVisible, setSensitiveVisible } = useUsageLogsContext()
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
+  const { data: tokenNames = [] } = useQuery({
+    queryKey: ['usage-log-token-filter'],
+    queryFn: async () => {
+      const firstPage = await getApiKeys({ p: 1, size: 100 })
+      if (!firstPage.success) return []
+
+      const firstItems = firstPage.data?.items ?? []
+      const total = firstPage.data?.total ?? firstItems.length
+      const pageCount = Math.ceil(total / 100)
+      const remainingPages = await Promise.all(
+        Array.from({ length: Math.max(pageCount - 1, 0) }, (_, index) =>
+          getApiKeys({ p: index + 2, size: 100 })
+        )
+      )
+
+      return [
+        ...firstItems,
+        ...remainingPages.flatMap((page) => page.data?.items ?? []),
+      ]
+        .map((token) => token.name)
+        .filter(Boolean)
+    },
+  })
 
   const searchState = useMemo<CommonLogDraft>(() => {
     const { start, end } = getDefaultTimeRange()
@@ -234,7 +264,6 @@ export function CommonLogsFilterBar<TData>(
   )
 
   const hasExpandedFilters =
-    !!filters.token ||
     !!filters.username ||
     !!filters.channel ||
     !!filters.requestId ||
@@ -242,10 +271,13 @@ export function CommonLogsFilterBar<TData>(
 
   const hasTypeFilter = logType !== LOG_TYPE_ALL_VALUE
   const hasAdditionalFilters =
-    !!filters.model || !!filters.group || hasTypeFilter || hasExpandedFilters
+    !!filters.token ||
+    !!filters.model ||
+    !!filters.group ||
+    hasTypeFilter ||
+    hasExpandedFilters
 
   const expandedFilterCount = [
-    filters.token,
     isAdmin ? filters.username : undefined,
     isAdmin ? filters.channel : undefined,
     filters.requestId,
@@ -262,6 +294,10 @@ export function CommonLogsFilterBar<TData>(
   )
   const logTypeLabel =
     logTypeItems.find((type) => type.value === logType)?.label ?? t('All Types')
+  const tokenFilterOptions = buildTokenFilterOptions(
+    tokenNames,
+    sensitiveVisible
+  )
 
   const statsBar = (
     <div className='flex flex-wrap items-center gap-2'>
@@ -298,6 +334,19 @@ export function CommonLogsFilterBar<TData>(
           handleChange('startTime', start)
           handleChange('endTime', end)
         }}
+      />
+    </LogsFilterField>
+  )
+  const tokenFilter = (
+    <LogsFilterField>
+      <ComboboxInput
+        options={tokenFilterOptions}
+        value={filters.token || ''}
+        onValueChange={(value) => handleChange('token', value || undefined)}
+        placeholder={t('Token Name')}
+        emptyText='No token found.'
+        type={sensitiveType}
+        className='h-8 min-w-0 text-sm leading-5'
       />
     </LogsFilterField>
   )
@@ -360,15 +409,6 @@ export function CommonLogsFilterBar<TData>(
   )
   const advancedFilters = (
     <>
-      <LogsFilterField>
-        <LogsFilterInput
-          placeholder={t('Token Name')}
-          type={sensitiveType}
-          value={filters.token || ''}
-          onChange={(e) => handleChange('token', e.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-      </LogsFilterField>
       {isAdmin && (
         <LogsFilterField>
           <LogsFilterInput
@@ -408,6 +448,16 @@ export function CommonLogsFilterBar<TData>(
       </LogsFilterField>
     </>
   )
+  const primaryFilterElements: Record<
+    CommonLogPrimaryFilterId,
+    React.ReactNode
+  > = {
+    dateRange: dateRangeFilter,
+    token: tokenFilter,
+    model: modelFilter,
+    group: groupFilter,
+    type: typeFilter,
+  }
 
   return (
     <LogsFilterToolbar
@@ -416,16 +466,18 @@ export function CommonLogsFilterBar<TData>(
       actionStart={sensitiveToggle}
       primaryFilters={
         <>
-          {dateRangeFilter}
-          {modelFilter}
-          {groupFilter}
-          {typeFilter}
+          {COMMON_LOG_PRIMARY_FILTER_ORDER.map((filterId) => (
+            <Fragment key={filterId}>
+              {primaryFilterElements[filterId]}
+            </Fragment>
+          ))}
         </>
       }
       advancedFilters={advancedFilters}
       mobilePinnedFilters={dateRangeFilter}
       mobileFilters={
         <>
+          {tokenFilter}
           {modelFilter}
           {groupFilter}
           {typeFilter}
@@ -433,8 +485,9 @@ export function CommonLogsFilterBar<TData>(
         </>
       }
       mobileFilterCount={
-        [filters.model, filters.group, hasTypeFilter].filter(Boolean).length +
-        expandedFilterCount
+        [filters.token, filters.model, filters.group, hasTypeFilter].filter(
+          Boolean
+        ).length + expandedFilterCount
       }
       hasAdvancedActiveFilters={hasExpandedFilters}
       advancedFilterCount={expandedFilterCount}

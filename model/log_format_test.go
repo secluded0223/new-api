@@ -8,13 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestFormatUserLogsStripsQuotaSaturation verifies the admin-only quota
-// saturation marker (nested under other.admin_info) is removed for non-admin
-// log views, since formatUserLogs strips the whole admin_info object.
-func TestFormatUserLogsStripsQuotaSaturation(t *testing.T) {
+// TestFormatUserLogsStripsAdminInfo verifies request audit and quota saturation
+// fields are removed from non-admin log views with the whole admin_info object.
+func TestFormatUserLogsStripsAdminInfo(t *testing.T) {
 	other := common.MapToJsonStr(map[string]interface{}{
 		"model_price": 0.004,
 		"admin_info": map[string]interface{}{
+			"request_body": `{"messages":[{"content":"private"}]}`,
 			"quota_saturation": map[string]interface{}{
 				"op":      "QuotaFromDecimal",
 				"kind":    "overflow",

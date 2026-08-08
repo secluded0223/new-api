@@ -49,6 +49,7 @@ import {
   UserCog,
   Info,
   LogIn,
+  MessageSquareText,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -499,6 +500,28 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const showAdminIp =
     !!props.log.ip && (showTiming || (props.isAdmin && isTopup))
   const adminInfo = other?.admin_info
+  const requestBody =
+    props.isAdmin && adminInfo?.request_body
+      ? (() => {
+          try {
+            return JSON.stringify(JSON.parse(adminInfo.request_body), null, 2)
+          } catch {
+            return adminInfo.request_body
+          }
+        })()
+      : ''
+  const requestBodyOmittedReason = props.isAdmin
+    ? adminInfo?.request_body_omitted_reason
+    : undefined
+  const showRequestContent =
+    props.isAdmin && (!!requestBody || !!requestBodyOmittedReason)
+  let dialogWidthClass = 'sm:max-w-lg'
+  if (showRequestContent) {
+    dialogWidthClass = 'sm:max-w-3xl'
+  }
+  if (isTieredBilling) {
+    dialogWidthClass = 'sm:max-w-4xl lg:max-w-5xl'
+  }
   const topupAuditFields =
     isTopup && props.isAdmin && adminInfo
       ? ([
@@ -630,7 +653,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
       contentClassName={cn(
         'min-w-0 overflow-hidden',
         'max-sm:max-h-[calc(100dvh-1.5rem)] max-sm:w-[calc(100vw-1.5rem)] max-sm:max-w-[calc(100vw-1.5rem)] max-sm:p-4',
-        isTieredBilling ? 'sm:max-w-4xl lg:max-w-5xl' : 'sm:max-w-lg'
+        dialogWidthClass
       )}
       headerClassName='max-sm:gap-1'
       titleClassName='flex items-center gap-2 text-base'
@@ -777,6 +800,51 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 </div>
               </div>
             </div>
+          </DetailSection>
+        )}
+
+        {showRequestContent && (
+          <DetailSection
+            icon={<MessageSquareText className='size-3.5' aria-hidden='true' />}
+            iconTone='chart-2'
+            label={t('Request Content')}
+          >
+            {requestBody ? (
+              <div className='relative min-w-0'>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='absolute top-0 right-0 h-5 w-5 p-0'
+                  onClick={() => copyToClipboard(requestBody)}
+                  title={t('Copy to clipboard')}
+                  aria-label={t('Copy to clipboard')}
+                >
+                  {copiedText === requestBody ? (
+                    <Check className='size-3 text-green-600' />
+                  ) : (
+                    <Copy className='size-3' />
+                  )}
+                </Button>
+                <pre className='max-h-80 min-w-0 overflow-auto pr-7 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap sm:wrap-break-word'>
+                  {requestBody}
+                </pre>
+                {adminInfo?.request_body_truncated && (
+                  <p className='text-muted-foreground mt-2 text-xs'>
+                    {t('Request content is truncated.')}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className='text-muted-foreground text-xs'>
+                {requestBodyOmittedReason === 'too_large'
+                  ? t(
+                      'Request content was not stored because it exceeded the audit limit.'
+                    )
+                  : t(
+                      'Request content was not stored because it was invalid JSON.'
+                    )}
+              </p>
+            )}
           </DetailSection>
         )}
 

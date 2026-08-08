@@ -33,6 +33,7 @@ interface ComboboxInputProps {
   options: ComboboxInputOption[]
   value?: string
   onValueChange: (value: string) => void
+  type?: React.ComponentProps<typeof Input>['type']
   placeholder?: string
   emptyText?: string
   className?: string
@@ -45,6 +46,7 @@ export function ComboboxInput({
   options,
   value = '',
   onValueChange,
+  type = 'text',
   placeholder = 'Select or type...',
   emptyText = 'No option found.',
   className,
@@ -163,7 +165,7 @@ export function ComboboxInput({
       <Input
         ref={inputRef}
         id={id}
-        type='text'
+        type={type}
         role='combobox'
         aria-expanded={open}
         aria-haspopup='listbox'
