@@ -52,6 +52,7 @@ import {
   API_KEY_STATUSES,
   ERROR_MESSAGES,
 } from '../constants'
+import { getApiKeyQuotaSummary } from '../lib/api-key-quota'
 import type { ApiKey } from '../types'
 import { ApiKeyCell, UnlimitedQuotaBadge } from './api-keys-cells'
 import { useApiKeysColumns } from './api-keys-columns'
@@ -131,7 +132,7 @@ function ApiKeysMobileList({
       {rows.map((row) => {
         const apiKey = row.original
         const statusConfig = API_KEY_STATUSES[apiKey.status]
-        const total = apiKey.used_quota + apiKey.remain_quota
+        const quota = getApiKeyQuotaSummary(apiKey)
 
         return (
           <div
@@ -168,18 +169,32 @@ function ApiKeysMobileList({
 
             <div className='flex items-center justify-between gap-2 text-xs'>
               <span className='text-muted-foreground'>{t('Quota')}</span>
-              {apiKey.unlimited_quota ? (
-                <UnlimitedQuotaBadge used={apiKey.used_quota} />
+              {quota.isUnlimited ? (
+                <UnlimitedQuotaBadge used={quota.used} />
               ) : (
                 <span className='font-medium tabular-nums'>
-                  {formatQuota(apiKey.remain_quota)}
-                  <span className='text-muted-foreground font-normal'>
-                    {' / '}
-                    {formatQuota(total)}
-                  </span>
+                  {formatQuota(quota.total ?? 0)}
                 </span>
               )}
             </div>
+
+            <div className='flex items-center justify-between gap-2 text-xs'>
+              <span className='text-muted-foreground'>{t('Used')}</span>
+              <span className='font-medium tabular-nums'>
+                {formatQuota(quota.used)}
+              </span>
+            </div>
+
+            {!quota.isUnlimited && (
+              <div className='flex items-center justify-between gap-2 text-xs'>
+                <span className='text-muted-foreground'>
+                  {t('Remaining quota')}
+                </span>
+                <span className='font-medium tabular-nums'>
+                  {formatQuota(quota.remaining ?? 0)}
+                </span>
+              </div>
+            )}
           </div>
         )
       })}

@@ -157,12 +157,12 @@ export function UnlimitedQuotaBadge(props: UnlimitedQuotaBadgeProps) {
           <button
             type='button'
             className='focus-visible:ring-ring/50 -ml-1.5 cursor-help rounded-4xl focus-visible:ring-[3px] focus-visible:outline-none'
-            aria-label={`${t('Unlimited')}; ${t('Used:')} ${formattedUsed}`}
+            aria-label={`${t('Unlimited Quota')}; ${t('Used:')} ${formattedUsed}`}
           />
         }
       >
         <StatusBadge
-          label={t('Unlimited')}
+          label={t('Unlimited Quota')}
           variant='neutral'
           copyable={false}
         />

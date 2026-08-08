@@ -37,6 +37,7 @@ import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import { API_KEY_STATUSES } from '../constants'
+import { getApiKeyQuotaSummary } from '../lib/api-key-quota'
 import type { ApiKey } from '../types'
 import { ApiKeyTimestampCell } from './api-key-timestamp-cell'
 import {
@@ -141,53 +142,24 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
     },
     {
       id: 'quota',
-      accessorKey: 'remain_quota',
+      accessorFn: (apiKey) => {
+        const quota = getApiKeyQuotaSummary(apiKey)
+        return quota.total
+      },
       header: t('Quota'),
       cell: ({ row }) => {
-        const apiKey = row.original
-        if (apiKey.unlimited_quota) {
-          return <UnlimitedQuotaBadge used={apiKey.used_quota} />
+        const quota = getApiKeyQuotaSummary(row.original)
+        if (quota.isUnlimited) {
+          return <UnlimitedQuotaBadge used={quota.used} />
         }
 
-        const used = apiKey.used_quota
-        const remaining = apiKey.remain_quota
-        const total = used + remaining
-        const percentage = total > 0 ? (remaining / total) * 100 : 0
-
         return (
-          <Tooltip>
-            <TooltipTrigger render={<div className='w-[150px] space-y-1' />}>
-              <div className='flex justify-between text-xs'>
-                <span className='font-medium tabular-nums'>
-                  {formatQuota(remaining)}
-                </span>
-                <span className='text-muted-foreground tabular-nums'>
-                  {formatQuota(total)}
-                </span>
-              </div>
-              <Progress
-                value={percentage}
-                className={cn('h-1.5', getQuotaProgressColor(percentage))}
-              />
-            </TooltipTrigger>
-            <TooltipContent>
-              <div className='space-y-1 text-xs'>
-                <div>
-                  {t('Used:')} {formatQuota(used)}
-                </div>
-                <div>
-                  {t('Remaining:')} {formatQuota(remaining)} (
-                  {percentage.toFixed(1)}%)
-                </div>
-                <div>
-                  {t('Total:')} {formatQuota(total)}
-                </div>
-              </div>
-            </TooltipContent>
-          </Tooltip>
+          <span className='font-medium tabular-nums'>
+            {formatQuota(quota.total ?? 0)}
+          </span>
         )
       },
-      size: 170,
+      size: 130,
     },
     {
       accessorKey: 'used_quota',
@@ -198,6 +170,35 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
         </span>
       ),
       size: 120,
+      meta: { mobileHidden: true },
+    },
+    {
+      id: 'remaining_quota',
+      accessorFn: (apiKey) => {
+        const quota = getApiKeyQuotaSummary(apiKey)
+        return quota.remaining
+      },
+      header: t('Remaining quota'),
+      cell: ({ row }) => {
+        const quota = getApiKeyQuotaSummary(row.original)
+        if (quota.isUnlimited) {
+          return <span className='text-muted-foreground'>-</span>
+        }
+
+        const percentage = quota.remainingPercentage ?? 0
+        return (
+          <div className='w-[130px] space-y-1.5'>
+            <span className='font-medium tabular-nums'>
+              {formatQuota(quota.remaining ?? 0)}
+            </span>
+            <Progress
+              value={percentage}
+              className={cn('h-1.5', getQuotaProgressColor(percentage))}
+            />
+          </div>
+        )
+      },
+      size: 150,
       meta: { mobileHidden: true },
     },
     {
