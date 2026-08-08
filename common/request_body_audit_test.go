@@ -2,6 +2,7 @@ package common
 
 import (
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -34,6 +35,36 @@ func TestAttachRequestBodyAuditSanitizesAdminOnlyContent(t *testing.T) {
 	assert.Contains(t, storedBody, `"api_key":"[redacted]"`)
 	assert.Contains(t, storedBody, `"image":"[binary data omitted]"`)
 	assert.Contains(t, storedBody, `"data":"[binary data omitted]"`)
+}
+
+func TestAttachRequestBodyAuditCompactsCodexStyleInput(t *testing.T) {
+	previousEnabled := RequestBodyLogEnabled
+	RequestBodyLogEnabled = true
+	t.Cleanup(func() { RequestBodyLogEnabled = previousEnabled })
+
+	messages := make([]string, 0, requestBodyAuditMaxListItems+2)
+	for i := 0; i < requestBodyAuditMaxListItems+2; i++ {
+		messages = append(messages, `{"role":"user","content":[{"type":"input_text","text":"message `+strconv.Itoa(i)+`"}],"id":"msg_`+strconv.Itoa(i)+`"}`)
+	}
+	requestBody := []byte(`{
+		"client_metadata":{"x-codex-turn-metadata":"private session data"},
+		"include":["reasoning.encrypted_content"],
+		"model":"gpt-test",
+		"input":[` + strings.Join(messages, ",") + `]
+	}`)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Set(KeyRequestBody, requestBody)
+	other := map[string]interface{}{}
+
+	AttachRequestBodyAudit(context, other)
+
+	adminInfo := other["admin_info"].(map[string]interface{})
+	storedBody := adminInfo["request_body"].(string)
+	assert.Contains(t, storedBody, `"_omitted_previous_items":2`)
+	assert.Contains(t, storedBody, `"text":"message 13"`)
+	assert.NotContains(t, storedBody, "private session data")
+	assert.NotContains(t, storedBody, "reasoning.encrypted_content")
+	assert.NotContains(t, storedBody, `"id":"msg_13"`)
 }
 
 func TestAttachRequestBodyAuditHonorsDisabledSetting(t *testing.T) {

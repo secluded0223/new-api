@@ -11,6 +11,8 @@ import (
 const (
 	RequestBodyAuditMaxSourceBytes = 1 << 20
 	RequestBodyAuditMaxStoredBytes = 16 << 10
+	requestBodyAuditMaxStringBytes = 2 << 10
+	requestBodyAuditMaxListItems   = 12
 )
 
 var requestBodyAuditSensitiveKeys = map[string]struct{}{
@@ -31,6 +33,12 @@ var requestBodyAuditBinaryKeys = map[string]struct{}{
 	"data":     {},
 	"file":     {},
 	"image":    {},
+}
+
+var requestBodyAuditOmittedKeys = map[string]struct{}{
+	"client_metadata":   {},
+	"encrypted_content": {},
+	"include":           {},
 }
 
 func AttachRequestBodyAudit(c *gin.Context, other map[string]interface{}) {
@@ -60,7 +68,8 @@ func AttachRequestBodyAudit(c *gin.Context, other map[string]interface{}) {
 		return
 	}
 
-	sanitizedBody, err := Marshal(sanitizeRequestBodyAuditValue(payload))
+	truncated := false
+	sanitizedBody, err := Marshal(sanitizeRequestBodyAuditValue(payload, "", &truncated))
 	if err != nil {
 		return
 	}
@@ -71,6 +80,9 @@ func AttachRequestBodyAudit(c *gin.Context, other map[string]interface{}) {
 		return
 	}
 	adminInfo["request_body"] = string(sanitizedBody)
+	if truncated {
+		adminInfo["request_body_truncated"] = true
+	}
 }
 
 func cachedRequestBody(c *gin.Context) ([]byte, int64, bool) {
@@ -102,11 +114,15 @@ func requestBodyAuditAdminInfo(other map[string]interface{}) map[string]interfac
 	return adminInfo
 }
 
-func sanitizeRequestBodyAuditValue(value interface{}) interface{} {
+func sanitizeRequestBodyAuditValue(value interface{}, key string, truncated *bool) interface{} {
 	switch typedValue := value.(type) {
 	case map[string]interface{}:
 		for key, child := range typedValue {
 			normalizedKey := strings.ReplaceAll(strings.ToLower(key), "-", "_")
+			if _, omitted := requestBodyAuditOmittedKeys[normalizedKey]; omitted {
+				typedValue[key] = "[omitted]"
+				continue
+			}
 			_, sensitive := requestBodyAuditSensitiveKeys[normalizedKey]
 			if sensitive || strings.HasSuffix(normalizedKey, "_token") ||
 				strings.HasSuffix(normalizedKey, "_secret") ||
@@ -121,19 +137,64 @@ func sanitizeRequestBodyAuditValue(value interface{}) interface{} {
 					continue
 				}
 			}
-			typedValue[key] = sanitizeRequestBodyAuditValue(child)
+			typedValue[key] = sanitizeRequestBodyAuditValue(child, normalizedKey, truncated)
 		}
 	case []interface{}:
+		if key == "messages" || key == "input" {
+			return sanitizeRequestBodyAuditList(typedValue, truncated)
+		}
 		for index, child := range typedValue {
-			typedValue[index] = sanitizeRequestBodyAuditValue(child)
+			typedValue[index] = sanitizeRequestBodyAuditValue(child, key, truncated)
 		}
 	case string:
 		lowerValue := strings.ToLower(typedValue)
 		if strings.HasPrefix(lowerValue, "data:") && strings.Contains(lowerValue, ";base64,") {
 			return "[binary data omitted]"
 		}
+		if len(typedValue) > requestBodyAuditMaxStringBytes {
+			*truncated = true
+			return truncateUTF8Bytes(typedValue, requestBodyAuditMaxStringBytes) + "...[truncated]"
+		}
 	}
 	return value
+}
+
+func sanitizeRequestBodyAuditList(values []interface{}, truncated *bool) []interface{} {
+	startIndex := 0
+	if len(values) > requestBodyAuditMaxListItems {
+		startIndex = len(values) - requestBodyAuditMaxListItems
+		*truncated = true
+	}
+
+	result := make([]interface{}, 0, len(values)-startIndex+1)
+	if startIndex > 0 {
+		result = append(result, map[string]interface{}{
+			"_omitted_previous_items": startIndex,
+		})
+	}
+
+	for _, value := range values[startIndex:] {
+		result = append(result, sanitizeRequestBodyAuditMessage(value, truncated))
+	}
+	return result
+}
+
+func sanitizeRequestBodyAuditMessage(value interface{}, truncated *bool) interface{} {
+	message, ok := value.(map[string]interface{})
+	if !ok {
+		return sanitizeRequestBodyAuditValue(value, "", truncated)
+	}
+
+	compact := make(map[string]interface{})
+	for _, key := range []string{"role", "type", "name", "content", "text", "prompt"} {
+		if child, exists := message[key]; exists {
+			compact[key] = sanitizeRequestBodyAuditValue(child, key, truncated)
+		}
+	}
+	if len(compact) == 0 {
+		return sanitizeRequestBodyAuditValue(value, "", truncated)
+	}
+	return compact
 }
 
 func truncateUTF8Bytes(value string, limit int) string {
