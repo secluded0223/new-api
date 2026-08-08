@@ -62,7 +62,9 @@ import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-p
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
+import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/auth-store'
 
 import type { UsageLog } from '../../data/schema'
 import {
@@ -480,6 +482,7 @@ interface DetailsDialogProps {
 export function DetailsDialog(props: DetailsDialogProps) {
   const { t } = useTranslation()
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
+  const userRole = useAuthStore((state) => state.auth.user?.role)
   const details = props.log.content ?? ''
   const other = parseLogOther(props.log.other)
   const typeConfig = getLogTypeConfig(props.log.type)
@@ -500,8 +503,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const showAdminIp =
     !!props.log.ip && (showTiming || (props.isAdmin && isTopup))
   const adminInfo = other?.admin_info
+  const canViewRequestContent =
+    props.isAdmin && userRole === ROLE.SUPER_ADMIN
   const requestBody =
-    props.isAdmin && adminInfo?.request_body
+    canViewRequestContent && adminInfo?.request_body
       ? (() => {
           try {
             return JSON.stringify(JSON.parse(adminInfo.request_body), null, 2)
@@ -510,11 +515,11 @@ export function DetailsDialog(props: DetailsDialogProps) {
           }
         })()
       : ''
-  const requestBodyOmittedReason = props.isAdmin
+  const requestBodyOmittedReason = canViewRequestContent
     ? adminInfo?.request_body_omitted_reason
     : undefined
   const showRequestContent =
-    props.isAdmin && (!!requestBody || !!requestBodyOmittedReason)
+    canViewRequestContent && (!!requestBody || !!requestBodyOmittedReason)
   let dialogWidthClass = 'sm:max-w-lg'
   if (showRequestContent) {
     dialogWidthClass = 'sm:max-w-3xl'

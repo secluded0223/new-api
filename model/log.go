@@ -113,6 +113,29 @@ func assignDisplayLogIds(logs []*Log, startIdx int) {
 	}
 }
 
+func stripAdminRequestBodyAudit(otherMap map[string]interface{}) {
+	adminInfo, ok := otherMap["admin_info"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	delete(adminInfo, "request_body")
+	delete(adminInfo, "request_body_truncated")
+	delete(adminInfo, "request_body_omitted_reason")
+}
+
+func formatAdminLogs(logs []*Log, viewerRole int) {
+	if viewerRole >= common.RoleRootUser {
+		return
+	}
+	for i := range logs {
+		otherMap, _ := common.StrToMap(logs[i].Other)
+		if otherMap != nil {
+			stripAdminRequestBodyAudit(otherMap)
+		}
+		logs[i].Other = common.MapToJsonStr(otherMap)
+	}
+}
+
 func formatUserLogs(logs []*Log, startIdx int) {
 	for i := range logs {
 		logs[i].ChannelName = ""
@@ -473,7 +496,7 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 	}
 }
 
-func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
+func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, upstreamRequestId string, viewerRole int) (logs []*Log, total int64, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
 		tx = LOG_DB
@@ -564,6 +587,7 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 		}
 	}
 
+	formatAdminLogs(logs, viewerRole)
 	return logs, total, err
 }
 

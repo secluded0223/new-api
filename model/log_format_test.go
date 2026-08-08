@@ -33,3 +33,43 @@ func TestFormatUserLogsStripsAdminInfo(t *testing.T) {
 	// Non-admin billing fields remain visible.
 	require.Contains(t, parsed, "model_price")
 }
+
+func TestFormatAdminLogsStripsRequestBodyForNonRootAdmin(t *testing.T) {
+	other := common.MapToJsonStr(map[string]interface{}{
+		"admin_info": map[string]interface{}{
+			"request_body":                `{"messages":[{"content":"private"}]}`,
+			"request_body_truncated":      true,
+			"request_body_omitted_reason": "too_large",
+			"usage_billing_path":          "local",
+			"local_count_tokens":          true,
+		},
+	})
+	logs := []*Log{{Other: other}}
+
+	formatAdminLogs(logs, common.RoleAdminUser)
+
+	parsed, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	adminInfo := parsed["admin_info"].(map[string]interface{})
+	require.NotContains(t, adminInfo, "request_body")
+	require.NotContains(t, adminInfo, "request_body_truncated")
+	require.NotContains(t, adminInfo, "request_body_omitted_reason")
+	require.Equal(t, "local", adminInfo["usage_billing_path"])
+	require.Equal(t, true, adminInfo["local_count_tokens"])
+}
+
+func TestFormatAdminLogsKeepsRequestBodyForRoot(t *testing.T) {
+	other := common.MapToJsonStr(map[string]interface{}{
+		"admin_info": map[string]interface{}{
+			"request_body": `{"messages":[{"content":"private"}]}`,
+		},
+	})
+	logs := []*Log{{Other: other}}
+
+	formatAdminLogs(logs, common.RoleRootUser)
+
+	parsed, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	adminInfo := parsed["admin_info"].(map[string]interface{})
+	require.Contains(t, adminInfo, "request_body")
+}
