@@ -68,6 +68,31 @@ func TestAttachRequestBodyAuditCompactsCodexStyleInput(t *testing.T) {
 	assert.Equal(t, true, adminInfo["request_body_truncated"])
 }
 
+func TestAttachRequestBodyAuditKeepsCurrentInputFromLargeRequest(t *testing.T) {
+	previousEnabled := RequestBodyLogEnabled
+	RequestBodyLogEnabled = true
+	t.Cleanup(func() { RequestBodyLogEnabled = previousEnabled })
+
+	requestBody := []byte(`{
+		"model":"gpt-test",
+		"padding":"` + strings.Repeat("x", 1<<20+128) + `",
+		"input":[
+			{"role":"user","content":[{"type":"input_text","text":"current request"}]}
+		]
+	}`)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Set(KeyRequestBody, requestBody)
+	other := map[string]interface{}{}
+
+	AttachRequestBodyAudit(context, other)
+
+	adminInfo := other["admin_info"].(map[string]interface{})
+	storedBody, ok := adminInfo["request_body"].(string)
+	require.True(t, ok)
+	assert.Contains(t, storedBody, `"text":"current request"`)
+	assert.NotEqual(t, "too_large", adminInfo["request_body_omitted_reason"])
+}
+
 func TestAttachRequestBodyAuditHonorsDisabledSetting(t *testing.T) {
 	previousEnabled := RequestBodyLogEnabled
 	RequestBodyLogEnabled = false

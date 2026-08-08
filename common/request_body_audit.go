@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	RequestBodyAuditMaxSourceBytes = 1 << 20
+	RequestBodyAuditMaxSourceBytes = 8 << 20
 	RequestBodyAuditMaxStoredBytes = 16 << 10
 	requestBodyAuditMaxStringBytes = 2 << 10
 )
