@@ -332,6 +332,25 @@ func BatchResetTokenQuota(c *gin.Context) {
 	common.ApiSuccess(c, count)
 }
 
+type TokenReorder struct {
+	Id       int  `json:"id"`
+	TargetId int  `json:"target_id"`
+	Before   bool `json:"before"`
+}
+
+func ReorderToken(c *gin.Context) {
+	var request TokenReorder
+	if err := c.ShouldBindJSON(&request); err != nil || request.Id == 0 || request.TargetId == 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	if err := model.ReorderToken(request.Id, request.TargetId, c.GetInt("id"), request.Before); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
 type TokenBatch struct {
 	Ids []int `json:"ids"`
 }

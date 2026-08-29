@@ -105,6 +105,19 @@ export async function batchUpdateApiKeyGroup(
   return res.data
 }
 
+export async function reorderApiKey(
+  id: number,
+  targetId: number,
+  before: boolean
+): Promise<ApiResponse> {
+  const res = await api.post('/api/token/reorder', {
+    id,
+    target_id: targetId,
+    before,
+  })
+  return res.data
+}
+
 // Update API key status (enable/disable)
 export async function updateApiKeyStatus(
   id: number,

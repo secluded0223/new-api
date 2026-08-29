@@ -16,11 +16,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import type { Table as TanstackTable } from '@tanstack/react-table'
 import { Database } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -45,7 +54,7 @@ import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-import { getApiKeys, searchApiKeys } from '../api'
+import { getApiKeys, reorderApiKey, searchApiKeys } from '../api'
 import {
   API_KEY_STATUS,
   API_KEY_STATUS_OPTIONS,
@@ -55,11 +64,12 @@ import {
 import { getApiKeyQuotaSummary } from '../lib/api-key-quota'
 import type { ApiKey } from '../types'
 import { ApiKeyCell, UnlimitedQuotaBadge } from './api-keys-cells'
+import { ApiKeyDragHandle } from './api-key-drag-handle'
 import { useApiKeysColumns } from './api-keys-columns'
 import { ApiKeysGroupSwitcher } from './api-keys-group-switcher'
 import { useApiKeys } from './api-keys-provider'
-import { DataTableRowActions } from './data-table-row-actions'
 import { ApiKeysResetQuotaButton } from './api-keys-reset-quota-button'
+import { DataTableRowActions } from './data-table-row-actions'
 
 const route = getRouteApi('/_authenticated/keys/')
 const API_KEYS_COLUMN_VISIBILITY_STORAGE_KEY = 'api-keys:column-visibility'
@@ -144,8 +154,11 @@ function ApiKeysMobileList({
           >
             <div className='flex items-start justify-between gap-3'>
               <div className='min-w-0'>
-                <div className='truncate text-sm font-semibold'>
-                  {apiKey.name}
+                <div className='flex items-center gap-1.5'>
+                  <ApiKeyDragHandle id={apiKey.id} />
+                  <div className='truncate text-sm font-semibold'>
+                    {apiKey.name}
+                  </div>
                 </div>
                 <div className='text-muted-foreground text-[11px]'>
                   {t('API Key')}
@@ -213,7 +226,7 @@ function ApiKeysMobileList({
 
 export function ApiKeysTable() {
   const { t } = useTranslation()
-  const { refreshTrigger } = useApiKeys()
+  const { refreshTrigger, triggerRefresh } = useApiKeys()
   const [now, setNow] = useState(() => Date.now())
   const columns = useApiKeysColumns(now)
 
@@ -318,48 +331,100 @@ export function ApiKeysTable() {
     ensurePageInRange,
   })
 
-  return (
-    <DataTablePage
-      table={table}
-      columns={columns}
-      isLoading={isLoading}
-      isFetching={isFetching}
-      emptyTitle={t('No API Keys Found')}
-      emptyDescription={t(
-        'No API keys available. Create your first API key to get started.'
-      )}
-      skeletonKeyPrefix='api-keys-skeleton'
-      applyHeaderSize
-      toolbarProps={{
-        searchPlaceholder: t('Filter by name...'),
-        additionalSearch: (
-          <Input
-            placeholder={t('Filter by API key...')}
-            aria-label={t('Filter by API key...')}
-            value={tokenFilterInput}
-            onChange={(e) => setTokenFilterInput(e.target.value)}
-            className='w-full sm:w-50 lg:w-60'
-          />
-        ),
-        filters: [
-          {
-            columnId: 'status',
-            title: t('Status'),
-            options: API_KEY_STATUS_OPTIONS,
-            singleSelect: true,
-          },
-        ],
-        preActions: (
-          <>
-            <ApiKeysGroupSwitcher table={table} />
-            <ApiKeysResetQuotaButton table={table} />
-          </>
-        ),
-      }}
-      mobile={<ApiKeysMobileList table={table} isLoading={isLoading} />}
-      getRowClassName={(row) =>
-        isDisabledApiKeyRow(row.original) ? DISABLED_ROW_DESKTOP : undefined
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  )
+  const handleReorder = useCallback(
+    async (sourceId: number, targetId: number, before: boolean) => {
+      if (sourceId === targetId) return
+      try {
+        const result = await reorderApiKey(sourceId, targetId, before)
+        if (!result.success) {
+          toast.error(result.message || t(ERROR_MESSAGES.UNEXPECTED))
+          return
+        }
+        triggerRefresh()
+      } catch {
+        toast.error(t(ERROR_MESSAGES.UNEXPECTED))
       }
-    />
+    },
+    [t, triggerRefresh]
+  )
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const targetId = event.over ? Number(event.over.id) : 0
+      const sourceId = Number(event.active.id)
+      if (!targetId || !sourceId || targetId === sourceId) return
+      const visibleRows = table.getRowModel().rows
+      const sourceIndex = visibleRows.findIndex(
+        (item) => item.original.id === sourceId
+      )
+      const targetIndex = visibleRows.findIndex(
+        (item) => item.original.id === targetId
+      )
+      if (sourceIndex < 0 || targetIndex < 0) return
+      void handleReorder(sourceId, targetId, sourceIndex > targetIndex)
+    },
+    [handleReorder, table]
+  )
+
+  const sortableIds = table
+    .getRowModel()
+    .rows.map((row) => String(row.original.id))
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext
+        items={sortableIds}
+        strategy={verticalListSortingStrategy}
+      >
+        <DataTablePage
+          table={table}
+          columns={columns}
+          isLoading={isLoading}
+          isFetching={isFetching}
+          emptyTitle={t('No API Keys Found')}
+          emptyDescription={t(
+            'No API keys available. Create your first API key to get started.'
+          )}
+          skeletonKeyPrefix='api-keys-skeleton'
+          applyHeaderSize
+          toolbarProps={{
+            searchPlaceholder: t('Filter by name...'),
+            additionalSearch: (
+              <Input
+                placeholder={t('Filter by API key...')}
+                aria-label={t('Filter by API key...')}
+                value={tokenFilterInput}
+                onChange={(e) => setTokenFilterInput(e.target.value)}
+                className='w-full sm:w-50 lg:w-60'
+              />
+            ),
+            filters: [
+              {
+                columnId: 'status',
+                title: t('Status'),
+                options: API_KEY_STATUS_OPTIONS,
+                singleSelect: true,
+              },
+            ],
+            preActions: (
+              <>
+                <ApiKeysGroupSwitcher table={table} />
+                <ApiKeysResetQuotaButton table={table} />
+              </>
+            ),
+          }}
+          mobile={<ApiKeysMobileList table={table} isLoading={isLoading} />}
+          getRowClassName={(row) =>
+            isDisabledApiKeyRow(row.original) ? DISABLED_ROW_DESKTOP : undefined
+          }
+        />
+      </SortableContext>
+    </DndContext>
   )
 }

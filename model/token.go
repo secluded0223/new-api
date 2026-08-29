@@ -22,6 +22,7 @@ type Token struct {
 	ExpiredTime        int64          `json:"expired_time" gorm:"bigint;default:-1"` // -1 means never expired
 	RemainQuota        int            `json:"remain_quota" gorm:"default:0"`
 	Quota              int            `json:"quota" gorm:"default:0"` // configured quota restored by reset
+	SortOrder          int64          `json:"-" gorm:"index"`
 	UnlimitedQuota     bool           `json:"unlimited_quota"`
 	ModelLimitsEnabled bool           `json:"model_limits_enabled"`
 	ModelLimits        string         `json:"model_limits" gorm:"type:text"`
@@ -83,7 +84,7 @@ func (token *Token) GetIpLimits() []string {
 func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {
 	var tokens []*Token
 	var err error
-	err = DB.Where("user_id = ?", userId).Order("id desc").Limit(num).Offset(startIdx).Find(&tokens).Error
+	err = DB.Where("user_id = ?", userId).Order("sort_order asc, id desc").Limit(num).Offset(startIdx).Find(&tokens).Error
 	return tokens, err
 }
 
@@ -186,7 +187,7 @@ func SearchUserTokens(userId int, keyword string, token string, offset int, limi
 	}
 
 	// 再分页查数据
-	err = baseQuery.Order("id desc").Offset(offset).Limit(limit).Find(&tokens).Error
+	err = baseQuery.Order("sort_order asc, id desc").Offset(offset).Limit(limit).Find(&tokens).Error
 	if err != nil {
 		common.SysError("failed to search tokens: " + err.Error())
 		return nil, 0, errors.New("搜索令牌失败")
@@ -286,6 +287,16 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 }
 
 func (token *Token) Insert() error {
+	if token.SortOrder == 0 {
+		var maxSortOrder int64
+		if err := DB.Model(&Token{}).
+			Where("user_id = ?", token.UserId).
+			Select("COALESCE(MAX(sort_order), -1)").
+			Scan(&maxSortOrder).Error; err != nil {
+			return err
+		}
+		token.SortOrder = maxSortOrder + 1
+	}
 	var err error
 	err = DB.Create(token).Error
 	return err
@@ -306,6 +317,74 @@ func (token *Token) Update() (err error) {
 	err = DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "quota", "unlimited_quota",
 		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry").Updates(token).Error
 	return err
+}
+
+// ReorderToken moves one token before or after another token in the user's
+// complete list, then normalizes sort_order so pagination and filtering remain
+// stable.
+func ReorderToken(id int, targetID int, userID int, before bool) error {
+	if id == 0 || targetID == 0 || userID == 0 {
+		return errors.New("id、targetID 或 userID 为空！")
+	}
+	if id == targetID {
+		return nil
+	}
+
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	var tokens []Token
+	if err := lockForUpdate(tx).
+		Where("user_id = ?", userID).
+		Order("sort_order asc, id desc").
+		Find(&tokens).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	fromIndex, targetIndex := -1, -1
+	for i := range tokens {
+		switch tokens[i].Id {
+		case id:
+			fromIndex = i
+		case targetID:
+			targetIndex = i
+		}
+	}
+	if fromIndex < 0 || targetIndex < 0 {
+		tx.Rollback()
+		return gorm.ErrRecordNotFound
+	}
+
+	moved := tokens[fromIndex]
+	tokens = append(tokens[:fromIndex], tokens[fromIndex+1:]...)
+	if fromIndex < targetIndex {
+		targetIndex--
+	}
+	insertAt := targetIndex
+	if !before {
+		insertAt++
+	}
+	if insertAt < 0 {
+		insertAt = 0
+	}
+	if insertAt > len(tokens) {
+		insertAt = len(tokens)
+	}
+	tokens = append(tokens, Token{})
+	copy(tokens[insertAt+1:], tokens[insertAt:])
+	tokens[insertAt] = moved
+
+	for i := range tokens {
+		if err := tx.Model(&Token{}).
+			Where("id = ? AND user_id = ?", tokens[i].Id, userID).
+			Update("sort_order", int64(i)).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit().Error
 }
 
 func (token *Token) SelectUpdate() (err error) {

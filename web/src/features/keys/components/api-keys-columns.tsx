@@ -46,6 +46,7 @@ import {
   ModelLimitsCell,
   UnlimitedQuotaBadge,
 } from './api-keys-cells'
+import { ApiKeyDragHandle } from './api-key-drag-handle'
 import { DataTableRowActions } from './data-table-row-actions'
 
 function getQuotaProgressColor(percentage: number): string {
@@ -82,6 +83,15 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
   const staleAccessThreshold = dayjs(now).subtract(3, 'month').valueOf()
   return [
     {
+      id: 'sort',
+      header: () => null,
+      cell: ({ row }) => <ApiKeyDragHandle id={row.original.id} />,
+      enableSorting: false,
+      enableHiding: false,
+      size: 36,
+      meta: { mobileHidden: true },
+    },
+    {
       id: 'select',
       header: ({ table }) => (
         <Checkbox
@@ -102,7 +112,7 @@ export function useApiKeysColumns(now: number): ColumnDef<ApiKey>[] {
       ),
       enableSorting: false,
       enableHiding: false,
-      size: 40,
+      size: 52,
     },
     {
       accessorKey: 'name',
