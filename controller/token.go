@@ -109,8 +109,8 @@ func GetTokenStatus(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"object":          "credit_summary",
-		"total_granted":   token.RemainQuota,
-		"total_used":      0, // not supported currently
+		"total_granted":   token.Quota,
+		"total_used":      token.TotalUsedQuota,
 		"total_available": token.RemainQuota,
 		"expires_at":      expiredAt * 1000,
 	})
@@ -154,8 +154,8 @@ func GetTokenUsage(c *gin.Context) {
 		"data": gin.H{
 			"object":               "token_usage",
 			"name":                 token.Name,
-			"total_granted":        token.RemainQuota + token.UsedQuota,
-			"total_used":           token.UsedQuota,
+			"total_granted":        token.Quota,
+			"total_used":           token.TotalUsedQuota,
 			"total_available":      token.RemainQuota,
 			"unlimited_quota":      token.UnlimitedQuota,
 			"model_limits":         token.GetModelLimitsMap(),
@@ -216,6 +216,7 @@ func AddToken(c *gin.Context) {
 		AccessedTime:       common.GetTimestamp(),
 		ExpiredTime:        token.ExpiredTime,
 		RemainQuota:        token.RemainQuota,
+		Quota:              token.RemainQuota,
 		UnlimitedQuota:     token.UnlimitedQuota,
 		ModelLimitsEnabled: token.ModelLimitsEnabled,
 		ModelLimits:        token.ModelLimits,
@@ -293,7 +294,11 @@ func UpdateToken(c *gin.Context) {
 		// If you add more fields, please also update token.Update()
 		cleanToken.Name = token.Name
 		cleanToken.ExpiredTime = token.ExpiredTime
-		cleanToken.RemainQuota = token.RemainQuota
+		cleanToken.Quota = token.RemainQuota
+		cleanToken.RemainQuota = token.RemainQuota - cleanToken.UsedQuota
+		if cleanToken.RemainQuota < 0 {
+			cleanToken.RemainQuota = 0
+		}
 		cleanToken.UnlimitedQuota = token.UnlimitedQuota
 		cleanToken.ModelLimitsEnabled = token.ModelLimitsEnabled
 		cleanToken.ModelLimits = token.ModelLimits
@@ -311,6 +316,20 @@ func UpdateToken(c *gin.Context) {
 		"message": "",
 		"data":    buildMaskedTokenResponse(cleanToken),
 	})
+}
+
+func BatchResetTokenQuota(c *gin.Context) {
+	var tokenBatch TokenBatch
+	if err := c.ShouldBindJSON(&tokenBatch); err != nil || len(tokenBatch.Ids) == 0 || len(tokenBatch.Ids) > 100 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	count, err := model.BatchResetTokenQuota(tokenBatch.Ids, c.GetInt("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, count)
 }
 
 type TokenBatch struct {

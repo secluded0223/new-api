@@ -82,6 +82,13 @@ export async function deleteApiKey(id: number): Promise<ApiResponse> {
   return res.data
 }
 
+export async function batchResetApiKeyQuota(
+  ids: number[]
+): Promise<ApiResponse<number>> {
+  const res = await api.post('/api/token/reset-quota', { ids })
+  return res.data
+}
+
 // Batch delete multiple API keys
 export async function batchDeleteApiKeys(
   ids: number[]

@@ -202,17 +202,19 @@ export function buildApiParams(config: {
     ...(searchParams.type ? { type: processType(searchParams.type) } : {}),
     ...(searchParams.model ? { model_name: String(searchParams.model) } : {}),
     ...(searchParams.token ? { token_name: String(searchParams.token) } : {}),
-    ...(searchParams.group ? { group: String(searchParams.group) } : {}),
+    ...(isAdmin && searchParams.group
+      ? { group: String(searchParams.group) }
+      : {}),
     ...(isAdmin && searchParams.channel
       ? { channel: Number(searchParams.channel) || 0 }
       : {}),
     ...(isAdmin && searchParams.username
       ? { username: String(searchParams.username) }
       : {}),
-    ...(searchParams.requestId
+    ...(isAdmin && searchParams.requestId
       ? { request_id: String(searchParams.requestId) }
       : {}),
-    ...(searchParams.upstreamRequestId
+    ...(isAdmin && searchParams.upstreamRequestId
       ? { upstream_request_id: String(searchParams.upstreamRequestId) }
       : {}),
     ...buildTimeRangeParams(searchParams, false),

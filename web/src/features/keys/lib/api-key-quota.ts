@@ -27,7 +27,7 @@ export type ApiKeyQuotaSummary = {
 }
 
 export function getApiKeyQuotaSummary(
-  apiKey: Pick<ApiKey, 'remain_quota' | 'unlimited_quota' | 'used_quota'>
+  apiKey: Pick<ApiKey, 'quota' | 'remain_quota' | 'unlimited_quota' | 'used_quota'>
 ): ApiKeyQuotaSummary {
   if (apiKey.unlimited_quota) {
     return {
@@ -39,7 +39,7 @@ export function getApiKeyQuotaSummary(
     }
   }
 
-  const total = apiKey.used_quota + apiKey.remain_quota
+  const total = apiKey.quota || apiKey.used_quota + apiKey.remain_quota
 
   return {
     isUnlimited: false,

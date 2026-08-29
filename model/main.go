@@ -268,6 +268,7 @@ func migrateDB() error {
 		return err
 	}
 
+	tokenQuotaAccountingNeedsBackfill := !DB.Migrator().HasColumn(&Token{}, "quota")
 	err := DB.AutoMigrate(
 		&Channel{},
 		&Token{},
@@ -307,6 +308,9 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	if err := initializeTokenQuotaAccounting(tokenQuotaAccountingNeedsBackfill); err != nil {
+		return err
+	}
 	if err := InitializeUserAuthVersions(); err != nil {
 		return err
 	}
@@ -326,6 +330,7 @@ func migrateDB() error {
 }
 
 func migrateDBFast() error {
+	tokenQuotaAccountingNeedsBackfill := !DB.Migrator().HasColumn(&Token{}, "quota")
 
 	var wg sync.WaitGroup
 
@@ -389,6 +394,9 @@ func migrateDBFast() error {
 			return err
 		}
 	}
+	if err := initializeTokenQuotaAccounting(tokenQuotaAccountingNeedsBackfill); err != nil {
+		return err
+	}
 	if err := InitializeUserAuthVersions(); err != nil {
 		return err
 	}
@@ -406,6 +414,20 @@ func migrateDBFast() error {
 	}
 	common.SysLog("database migrated")
 	return nil
+}
+
+func initializeTokenQuotaAccounting(needsBackfill bool) error {
+	if !needsBackfill {
+		return nil
+	}
+	if err := DB.Model(&Token{}).
+		Where("1 = 1").
+		Update("quota", gorm.Expr("remain_quota + used_quota")).Error; err != nil {
+		return err
+	}
+	return DB.Model(&Token{}).
+		Where("1 = 1").
+		Update("total_used_quota", gorm.Expr("used_quota")).Error
 }
 
 func migrateLOGDB() error {

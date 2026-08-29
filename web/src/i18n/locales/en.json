@@ -5238,6 +5238,14 @@
     "Zero retention": "Zero retention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Total consumption": "Total consumption",
+    "Failed to reset API key quota": "Failed to reset API key quota",
+    "API key quota reset successfully": "API key quota reset successfully",
+    "Reset API key quota?": "Reset API key quota?",
+    "The used quota for {{name}} will return to zero and the remaining quota will be restored to {{quota}}. Total consumption and usage history will not be changed.": "The used quota for {{name}} will return to zero and the remaining quota will be restored to {{quota}}. Total consumption and usage history will not be changed.",
+    "Reset selected API key quotas": "Reset selected API key quotas",
+    "Reset selected API key quotas?": "Reset selected API key quotas?",
+    "This will reset {{count}} finite API key quota(s). Total consumption and usage history will not be changed.": "This will reset {{count}} finite API key quota(s). Total consumption and usage history will not be changed."
   }
 }

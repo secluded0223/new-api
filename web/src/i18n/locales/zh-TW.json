@@ -5238,6 +5238,14 @@
     "Zero retention": "零數據保留",
     "Zhipu": "智譜",
     "Zhipu V4": "智譜 V4",
-    "Zoom": "縮放"
+    "Zoom": "縮放",
+    "Total consumption": "總消耗",
+    "Failed to reset API key quota": "重置 API 金鑰額度失敗",
+    "API key quota reset successfully": "API 金鑰額度重置成功",
+    "Reset API key quota?": "重置 API 金鑰額度？",
+    "The used quota for {{name}} will return to zero and the remaining quota will be restored to {{quota}}. Total consumption and usage history will not be changed.": "{{name}} 的已使用額度將歸零，剩餘額度將恢復為 {{quota}}。總消耗和使用記錄不會改變。",
+    "Reset selected API key quotas": "重置選取的 API 金鑰額度",
+    "Reset selected API key quotas?": "重置選取的 API 金鑰額度？",
+    "This will reset {{count}} finite API key quota(s). Total consumption and usage history will not be changed.": "這將重置 {{count}} 個有限額度 API 金鑰。總消耗和使用記錄不會改變。"
   }
 }

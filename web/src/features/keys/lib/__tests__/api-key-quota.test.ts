@@ -24,6 +24,7 @@ import { getApiKeyQuotaSummary } from '../api-key-quota.ts'
 describe('API key quota summary', () => {
   test('separates total, used, and remaining values for limited keys', () => {
     const summary = getApiKeyQuotaSummary({
+      quota: 1000,
       remain_quota: 948.5,
       unlimited_quota: false,
       used_quota: 51.5,
@@ -40,6 +41,7 @@ describe('API key quota summary', () => {
 
   test('exposes only used quota as numeric data for unlimited keys', () => {
     const summary = getApiKeyQuotaSummary({
+      quota: 0,
       remain_quota: 0,
       unlimited_quota: true,
       used_quota: 51.5,

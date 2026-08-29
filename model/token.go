@@ -21,11 +21,13 @@ type Token struct {
 	AccessedTime       int64          `json:"accessed_time" gorm:"bigint"`
 	ExpiredTime        int64          `json:"expired_time" gorm:"bigint;default:-1"` // -1 means never expired
 	RemainQuota        int            `json:"remain_quota" gorm:"default:0"`
+	Quota              int            `json:"quota" gorm:"default:0"` // configured quota restored by reset
 	UnlimitedQuota     bool           `json:"unlimited_quota"`
 	ModelLimitsEnabled bool           `json:"model_limits_enabled"`
 	ModelLimits        string         `json:"model_limits" gorm:"type:text"`
 	AllowIps           *string        `json:"allow_ips" gorm:"default:''"`
 	UsedQuota          int            `json:"used_quota" gorm:"default:0"` // used quota
+	TotalUsedQuota     int64          `json:"total_used_quota" gorm:"bigint;default:0"`
 	Group              string         `json:"group" gorm:"default:''"`
 	CrossGroupRetry    bool           `json:"cross_group_retry"` // 跨分组重试，仅auto分组有效
 	DeletedAt          gorm.DeletedAt `gorm:"index"`
@@ -301,7 +303,7 @@ func (token *Token) Update() (err error) {
 			})
 		}
 	}()
-	err = DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "unlimited_quota",
+	err = DB.Model(token).Select("name", "status", "expired_time", "remain_quota", "quota", "unlimited_quota",
 		"model_limits_enabled", "model_limits", "allow_ips", "group", "cross_group_retry").Updates(token).Error
 	return err
 }
@@ -401,9 +403,10 @@ func IncreaseTokenQuota(tokenId int, key string, quota int) (err error) {
 func increaseTokenQuota(id int, quota int) (err error) {
 	err = DB.Model(&Token{}).Where("id = ?", id).Updates(
 		map[string]interface{}{
-			"remain_quota":  gorm.Expr("remain_quota + ?", quota),
-			"used_quota":    gorm.Expr("used_quota - ?", quota),
-			"accessed_time": common.GetTimestamp(),
+			"remain_quota":     gorm.Expr("remain_quota + ?", quota),
+			"used_quota":       gorm.Expr("used_quota - ?", quota),
+			"total_used_quota": gorm.Expr("CASE WHEN total_used_quota < ? THEN 0 ELSE total_used_quota - ? END", quota, quota),
+			"accessed_time":    common.GetTimestamp(),
 		},
 	).Error
 	return err
@@ -431,12 +434,75 @@ func DecreaseTokenQuota(id int, key string, quota int) (err error) {
 func decreaseTokenQuota(id int, quota int) (err error) {
 	err = DB.Model(&Token{}).Where("id = ?", id).Updates(
 		map[string]interface{}{
-			"remain_quota":  gorm.Expr("remain_quota - ?", quota),
-			"used_quota":    gorm.Expr("used_quota + ?", quota),
-			"accessed_time": common.GetTimestamp(),
+			"remain_quota":     gorm.Expr("remain_quota - ?", quota),
+			"used_quota":       gorm.Expr("used_quota + ?", quota),
+			"total_used_quota": gorm.Expr("total_used_quota + ?", quota),
+			"accessed_time":    common.GetTimestamp(),
 		},
 	).Error
 	return err
+}
+
+func BatchResetTokenQuota(ids []int, userId int) (int, error) {
+	if len(ids) == 0 || userId == 0 {
+		return 0, errors.New("ids 或 userId 为空！")
+	}
+	if common.BatchUpdateEnabled {
+		batchUpdateRunLock.Lock()
+		defer batchUpdateRunLock.Unlock()
+		batchUpdateLocks[BatchUpdateTypeTokenQuota].Lock()
+		pending := make(map[int]int, len(ids))
+		for _, id := range ids {
+			if value := batchUpdateStores[BatchUpdateTypeTokenQuota][id]; value != 0 {
+				pending[id] = value
+				delete(batchUpdateStores[BatchUpdateTypeTokenQuota], id)
+			}
+		}
+		batchUpdateLocks[BatchUpdateTypeTokenQuota].Unlock()
+		for id, value := range pending {
+			if err := increaseTokenQuota(id, value); err != nil {
+				return 0, err
+			}
+		}
+	}
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return 0, tx.Error
+	}
+	var tokens []Token
+	if err := lockForUpdate(tx).Where("user_id = ? AND id IN ?", userId, ids).Find(&tokens).Error; err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+	resetCount := 0
+	for i := range tokens {
+		if tokens[i].UnlimitedQuota {
+			continue
+		}
+		tokens[i].RemainQuota = tokens[i].Quota
+		tokens[i].UsedQuota = 0
+		if tokens[i].Status == common.TokenStatusExhausted {
+			tokens[i].Status = common.TokenStatusEnabled
+		}
+		if err := tx.Model(&tokens[i]).Select("remain_quota", "used_quota", "status").Updates(&tokens[i]).Error; err != nil {
+			tx.Rollback()
+			return 0, err
+		}
+		resetCount++
+	}
+	if err := tx.Commit().Error; err != nil {
+		return 0, err
+	}
+	if common.RedisEnabled {
+		for _, token := range tokens {
+			if !token.UnlimitedQuota {
+				if err := cacheDeleteToken(token.Key); err != nil {
+					common.SysLog("failed to clear token cache after batch quota reset: " + err.Error())
+				}
+			}
+		}
+	}
+	return resetCount, nil
 }
 
 // CountUserTokens returns total number of tokens for the given user, used for pagination

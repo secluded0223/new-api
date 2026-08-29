@@ -5238,6 +5238,14 @@
     "Zero retention": "Không lưu dữ liệu",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Total consumption": "Tổng mức tiêu thụ",
+    "Failed to reset API key quota": "Không thể đặt lại hạn mức khóa API",
+    "API key quota reset successfully": "Đã đặt lại hạn mức khóa API",
+    "Reset API key quota?": "Đặt lại hạn mức khóa API?",
+    "The used quota for {{name}} will return to zero and the remaining quota will be restored to {{quota}}. Total consumption and usage history will not be changed.": "Hạn mức đã dùng của {{name}} sẽ trở về 0 và hạn mức còn lại sẽ được khôi phục thành {{quota}}. Tổng mức tiêu thụ và l���ch sử sử dụng sẽ không thay đổi.",
+    "Reset selected API key quotas": "Đặt lại hạn mức khóa API đã chọn",
+    "Reset selected API key quotas?": "Đặt lại hạn mức khóa API đã chọn?",
+    "This will reset {{count}} finite API key quota(s). Total consumption and usage history will not be changed.": "Thao tác này sẽ đặt lại {{count}} hạn mức khóa API hữu hạn. Tổng mức tiêu thụ và lịch sử sử dụng sẽ không thay đổi."
   }
 }

@@ -79,6 +79,7 @@ func GetLedgerSummary(startTimestamp, endTimestamp int64) (LedgerSummary, error)
 		}
 	}
 	trendMap := make(map[string]*LedgerTrendPoint)
+	trendRevenueQuota := make(map[string]int64)
 	var logs []struct {
 		CreatedAt int64
 		Type      int
@@ -98,12 +99,14 @@ func GetLedgerSummary(startTimestamp, endTimestamp int64) (LedgerSummary, error)
 			point = &LedgerTrendPoint{Date: date}
 			trendMap[date] = point
 		}
-		cents := int64(common.QuotaRound(float64(log.Quota) / common.QuotaPerUnit * 100))
 		if log.Type == LogTypeConsume {
-			point.RevenueCents += cents
+			trendRevenueQuota[date] += int64(log.Quota)
 		} else {
-			point.RevenueCents -= cents
+			trendRevenueQuota[date] -= int64(log.Quota)
 		}
+	}
+	for date, quota := range trendRevenueQuota {
+		trendMap[date].RevenueCents = int64(common.QuotaRound(float64(quota) / common.QuotaPerUnit * 100))
 	}
 	for _, expense := range expenses {
 		date := time.Unix(expense.OccurredAt, 0).Format("2006-01-02")
@@ -116,13 +119,29 @@ func GetLedgerSummary(startTimestamp, endTimestamp int64) (LedgerSummary, error)
 	}
 	trend := make([]LedgerTrendPoint, 0, len(trendMap))
 	for _, point := range trendMap {
-		point.ProfitCents = point.RevenueCents - point.ExpenseCents
 		trend = append(trend, *point)
 	}
 	sort.Slice(trend, func(i, j int) bool { return trend[i].Date < trend[j].Date })
 	revenueQuota := revenue.Consume - revenue.Refund
 	// QuotaPerUnit represents one unit of the default USD billing currency.
 	revenueCents := common.QuotaRound(float64(revenueQuota) / common.QuotaPerUnit * 100)
+	var trendRevenueCents int64
+	for _, point := range trend {
+		trendRevenueCents += point.RevenueCents
+	}
+	// Allocate the unavoidable sub-cent rounding remainder so the trend total
+	// always matches the headline revenue for the selected range.
+	if remainder := int64(revenueCents) - trendRevenueCents; remainder != 0 {
+		for i := len(trend) - 1; i >= 0; i-- {
+			if trendRevenueQuota[trend[i].Date] != 0 {
+				trend[i].RevenueCents += remainder
+				break
+			}
+		}
+	}
+	for i := range trend {
+		trend[i].ProfitCents = trend[i].RevenueCents - trend[i].ExpenseCents
+	}
 	return LedgerSummary{
 		RevenueQuota: revenueQuota,
 		RevenueCents: int64(revenueCents),

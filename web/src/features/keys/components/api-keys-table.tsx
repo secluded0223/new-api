@@ -58,8 +58,8 @@ import { ApiKeyCell, UnlimitedQuotaBadge } from './api-keys-cells'
 import { useApiKeysColumns } from './api-keys-columns'
 import { ApiKeysGroupSwitcher } from './api-keys-group-switcher'
 import { useApiKeys } from './api-keys-provider'
-import { DataTableBulkActions } from './data-table-bulk-actions'
 import { DataTableRowActions } from './data-table-row-actions'
+import { ApiKeysResetQuotaButton } from './api-keys-reset-quota-button'
 
 const route = getRouteApi('/_authenticated/keys/')
 const API_KEYS_COLUMN_VISIBILITY_STORAGE_KEY = 'api-keys:column-visibility'
@@ -195,6 +195,15 @@ function ApiKeysMobileList({
                 </span>
               </div>
             )}
+
+            <div className='flex items-center justify-between gap-2 text-xs'>
+              <span className='text-muted-foreground'>
+                {t('Total consumption')}
+              </span>
+              <span className='font-medium tabular-nums'>
+                {formatQuota(apiKey.total_used_quota)}
+              </span>
+            </div>
           </div>
         )
       })}
@@ -340,13 +349,17 @@ export function ApiKeysTable() {
             singleSelect: true,
           },
         ],
-        preActions: <ApiKeysGroupSwitcher table={table} />,
+        preActions: (
+          <>
+            <ApiKeysGroupSwitcher table={table} />
+            <ApiKeysResetQuotaButton table={table} />
+          </>
+        ),
       }}
       mobile={<ApiKeysMobileList table={table} isLoading={isLoading} />}
       getRowClassName={(row) =>
         isDisabledApiKeyRow(row.original) ? DISABLED_ROW_DESKTOP : undefined
       }
-      bulkActions={<DataTableBulkActions table={table} />}
     />
   )
 }

@@ -5238,6 +5238,14 @@
     "Zero retention": "データ保持なし",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム"
+    "Zoom": "ズーム",
+    "Total consumption": "累計消費量",
+    "Failed to reset API key quota": "APIキーのクォータをリセットできませんでした",
+    "API key quota reset successfully": "APIキーのクォータをリセットしました",
+    "Reset API key quota?": "APIキーのクォータをリセットしますか？",
+    "The used quota for {{name}} will return to zero and the remaining quota will be restored to {{quota}}. Total consumption and usage history will not be changed.": "{{name}} の使用済みクォータはゼロに戻り、残りのクォータは {{quota}} に復元されます。累計消費量と使用履歴は変更されません。",
+    "Reset selected API key quotas": "選択した API キーのクォータをリセット",
+    "Reset selected API key quotas?": "選択した API キーのクォータをリセットしますか？",
+    "This will reset {{count}} finite API key quota(s). Total consumption and usage history will not be changed.": "{{count}} 件の有限クォータ API キーをリセットします。累計消費量と使用履歴は変更されません。"
   }
 }
