@@ -12,10 +12,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// MergeTokenConsumption transfers the source key's cumulative consumption to
-// the target key. Quota and remaining balance are intentionally untouched.
-// The source key is disabled and its cumulative value cleared so the same
-// consumption is not counted twice in key-level totals.
+// MergeTokenConsumption transfers the source key's current and cumulative
+// consumption to the target key. Configured quotas are unchanged; the target's
+// remaining quota is reduced by the source's current-period usage. The source
+// key is disabled and its current/cumulative usage is cleared so the same
+// consumption is not counted twice.
 func MergeTokenConsumption(userID, sourceID, targetID int) error {
 	if userID <= 0 || sourceID <= 0 || targetID <= 0 || sourceID == targetID {
 		return errors.New("invalid token merge parameters")
@@ -55,18 +56,44 @@ func MergeTokenConsumption(userID, sourceID, targetID int) error {
 		tx.Rollback()
 		return errors.New("token consumption exceeds supported limit")
 	}
+	if source.UsedQuota < 0 || target.UsedQuota < 0 || source.RemainQuota < 0 || target.RemainQuota < 0 {
+		tx.Rollback()
+		return errors.New("token quota contains an invalid negative value")
+	}
+	maxInt := int(^uint(0) >> 1)
+	if source.UsedQuota > maxInt-target.UsedQuota {
+		tx.Rollback()
+		return errors.New("token usage exceeds supported limit")
+	}
+	if !target.UnlimitedQuota && source.UsedQuota > target.RemainQuota {
+		tx.Rollback()
+		return errors.New("target token quota is insufficient for merged usage")
+	}
 
 	mergedTotal := target.TotalUsedQuota + source.TotalUsedQuota
+	mergedUsed := target.UsedQuota + source.UsedQuota
+	targetUpdates := map[string]interface{}{
+		"total_used_quota": mergedTotal,
+		"used_quota":       mergedUsed,
+	}
+	if !target.UnlimitedQuota {
+		targetUpdates["remain_quota"] = target.RemainQuota - source.UsedQuota
+	}
 	if err := tx.Model(&Token{}).Where("id = ? AND user_id = ?", targetID, userID).
-		Update("total_used_quota", mergedTotal).Error; err != nil {
+		Updates(targetUpdates).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
+	sourceUpdates := map[string]interface{}{
+		"total_used_quota": int64(0),
+		"used_quota":       0,
+		"status":           common.TokenStatusDisabled,
+	}
+	if !source.UnlimitedQuota {
+		sourceUpdates["remain_quota"] = source.Quota
+	}
 	if err := tx.Model(&Token{}).Where("id = ? AND user_id = ?", sourceID, userID).
-		Updates(map[string]interface{}{
-			"total_used_quota": int64(0),
-			"status":           common.TokenStatusDisabled,
-		}).Error; err != nil {
+		Updates(sourceUpdates).Error; err != nil {
 		tx.Rollback()
 		return err
 	}

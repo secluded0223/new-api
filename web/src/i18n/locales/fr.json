@@ -2773,7 +2773,7 @@
     "Move": "Déplacer",
     "Move a request header": "Déplacer un en-tête de requête",
     "Move affiliate rewards to your main balance": "Transférer les récompenses d'affiliation vers votre solde principal",
-    "Move cumulative consumption from {{source}} to {{target}}. Quota and remaining balance will not change. The source key will be disabled.": "Transférer la consommation cumulée de {{source}} vers {{target}}. Le quota et le solde restant ne changent pas. La clé source sera désactivée.",
+    "Move cumulative consumption from {{source}} to {{target}}. Quota and remaining balance will not change. The source key will be disabled.": "Transférer la consommation actuelle et cumulée de {{source}} vers {{target}}. Le quota utilisé de la clé cible augmentera et son quota restant diminuera. La clé source sera désactivée.",
     "Move fallback to end": "Mettre le repli à la fin",
     "Move Field": "Déplacer le champ",
     "Move Header": "Déplacer l'en-tête",

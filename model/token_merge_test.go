@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func TestMergeTokenConsumptionMovesTotalOnly(t *testing.T) {
+func TestMergeTokenConsumptionMovesCurrentAndTotalUsage(t *testing.T) {
 	require.NoError(t, DB.AutoMigrate(&Token{}))
 	require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Token{}).Error)
 	t.Cleanup(func() {
@@ -30,12 +30,12 @@ func TestMergeTokenConsumptionMovesTotalOnly(t *testing.T) {
 	assert.Equal(t, int64(0), source.TotalUsedQuota)
 	assert.Equal(t, common.TokenStatusDisabled, source.Status)
 	assert.Equal(t, 1000, source.Quota)
-	assert.Equal(t, 200, source.RemainQuota)
-	assert.Equal(t, 800, source.UsedQuota)
+	assert.Equal(t, 1000, source.RemainQuota)
+	assert.Equal(t, 0, source.UsedQuota)
 	assert.Equal(t, int64(1900), target.TotalUsedQuota)
 	assert.Equal(t, 2000, target.Quota)
-	assert.Equal(t, 1500, target.RemainQuota)
-	assert.Equal(t, 500, target.UsedQuota)
+	assert.Equal(t, 700, target.RemainQuota)
+	assert.Equal(t, 1300, target.UsedQuota)
 
 	assert.Error(t, MergeTokenConsumption(30, 301, 303))
 }

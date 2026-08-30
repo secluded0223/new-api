@@ -2773,7 +2773,7 @@
     "Move": "Переместить",
     "Move a request header": "Переместить заголовок запроса",
     "Move affiliate rewards to your main balance": "Перевести партнерские вознаграждения на основной баланс",
-    "Move cumulative consumption from {{source}} to {{target}}. Quota and remaining balance will not change. The source key will be disabled.": "Перенести накопленный расход с {{source}} на {{target}}. Квота и остаток не изменятся. Исходный ключ будет отключён.",
+    "Move cumulative consumption from {{source}} to {{target}}. Quota and remaining balance will not change. The source key will be disabled.": "Перенести текущий и накопленный расход с {{source}} на {{target}}. Использованная квота целевого ключа увеличится, а оставшаяся уменьшится. Исходный ключ будет отключён.",
     "Move fallback to end": "Переместить резерв в конец",
     "Move Field": "Переместить поле",
     "Move Header": "Переместить заголовок",

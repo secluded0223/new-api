@@ -2773,7 +2773,7 @@
     "Move": "Di chuyển",
     "Move a request header": "Di chuyển header yêu cầu",
     "Move affiliate rewards to your main balance": "Chuyển phần thưởng liên kết vào số dư chính của bạn",
-    "Move cumulative consumption from {{source}} to {{target}}. Quota and remaining balance will not change. The source key will be disabled.": "Chuyển mức tiêu thụ tích lũy từ {{source}} sang {{target}}. Hạn ngạch và số dư không đổi. Khóa nguồn sẽ bị vô hiệu hóa.",
+    "Move cumulative consumption from {{source}} to {{target}}. Quota and remaining balance will not change. The source key will be disabled.": "Chuyển mức tiêu thụ hiện tại và tích lũy từ {{source}} sang {{target}}. Hạn ngạch đã dùng của khóa đích sẽ tăng và hạn ngạch còn lại sẽ giảm. Khóa nguồn sẽ bị vô hiệu hóa.",
     "Move fallback to end": "Đưa dự phòng xuống cuối",
     "Move Field": "Di chuyển trường",
     "Move Header": "Di chuyển tiêu đề",

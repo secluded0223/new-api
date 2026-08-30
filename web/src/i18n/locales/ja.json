@@ -2773,7 +2773,7 @@
     "Move": "移動",
     "Move a request header": "リクエストヘッダーを移動",
     "Move affiliate rewards to your main balance": "アフィリエイト報酬をメイン残高に移動する",
-    "Move cumulative consumption from {{source}} to {{target}}. Quota and remaining balance will not change. The source key will be disabled.": "{{source}} の累積消費量を {{target}} に移します。クォータと残高は変わりません。移行元キーは無効になります。",
+    "Move cumulative consumption from {{source}} to {{target}}. Quota and remaining balance will not change. The source key will be disabled.": "{{source}} の現在および累積消費量を {{target}} に移します。移行先キーの使用済みクォータが増え、残りのクォータが減ります。移行元キーは無効になります。",
     "Move fallback to end": "フォールバックを最後へ",
     "Move Field": "フィールドを移動",
     "Move Header": "ヘッダーを移動",

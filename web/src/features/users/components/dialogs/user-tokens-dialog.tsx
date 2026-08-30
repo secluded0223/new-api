@@ -338,7 +338,7 @@ export function UserTokensDialog(props: UserTokensDialogProps) {
         onOpenChange={setMergeOpen}
         title={t('Merge consumption')}
         desc={t(
-          'Move cumulative consumption from {{source}} to {{target}}. Quota and remaining balance will not change. The source key will be disabled.',
+          "Move current and cumulative consumption from {{source}} to {{target}}. The target key's used quota will increase and remaining quota will decrease. The source key will be disabled.",
           {
             source: selectedSource?.name ?? '',
             target: selectedTarget?.name ?? '',

@@ -2773,7 +2773,7 @@
     "Move": "Move",
     "Move a request header": "Move a request header",
     "Move affiliate rewards to your main balance": "Move affiliate rewards to your main balance",
-    "Move cumulative consumption from {{source}} to {{target}}. Quota and remaining balance will not change. The source key will be disabled.": "Move cumulative consumption from {{source}} to {{target}}. Quota and remaining balance will not change. The source key will be disabled.",
+    "Move cumulative consumption from {{source}} to {{target}}. Quota and remaining balance will not change. The source key will be disabled.": "Move current and cumulative consumption from {{source}} to {{target}}. The target key's used quota will increase and remaining quota will decrease. The source key will be disabled.",
     "Move fallback to end": "Move fallback to end",
     "Move Field": "Move Field",
     "Move Header": "Move Header",
