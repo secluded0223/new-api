@@ -85,6 +85,52 @@ func MergeTokenConsumption(userID, sourceID, targetID int) error {
 	return nil
 }
 
+// UpdateTokenUsedQuota changes the current-period consumption for one key.
+// The remaining quota is recalculated from the configured quota, while the
+// lifetime consumption total remains unchanged.
+func UpdateTokenUsedQuota(userID, tokenID, usedQuota int) error {
+	if userID <= 0 || tokenID <= 0 || usedQuota < 0 {
+		return errors.New("invalid token quota parameters")
+	}
+
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	var token Token
+	if err := lockForUpdate(tx).Where("user_id = ? AND id = ?", userID, tokenID).First(&token).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if !token.UnlimitedQuota && usedQuota > token.Quota {
+		tx.Rollback()
+		return errors.New("used quota cannot exceed token quota")
+	}
+	remainQuota := 0
+	if token.UnlimitedQuota {
+		remainQuota = token.RemainQuota
+	} else {
+		remainQuota = token.Quota - usedQuota
+	}
+	updates := map[string]interface{}{
+		"used_quota":   usedQuota,
+		"remain_quota": remainQuota,
+	}
+	if err := tx.Model(&Token{}).Where("user_id = ? AND id = ?", userID, tokenID).Updates(updates).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	if common.RedisEnabled {
+		if err := cacheDeleteToken(token.Key); err != nil {
+			common.SysLog("failed to clear token cache after used quota update: " + err.Error())
+		}
+	}
+	return nil
+}
+
 type Token struct {
 	Id                 int            `json:"id"`
 	UserId             int            `json:"user_id" gorm:"index"`

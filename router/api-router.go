@@ -142,6 +142,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.DELETE("/:id/bindings/:binding_type", controller.AdminClearUserBinding)
 				adminRoute.GET("/:id/tokens", middleware.RequirePermission(authz.TokenRead), controller.GetAdminUserTokens)
 				adminRoute.POST("/:id/tokens/merge", middleware.RequirePermission(authz.TokenMerge), controller.MergeAdminUserTokenConsumption)
+				adminRoute.PUT("/:id/tokens/:token_id/used-quota", middleware.RootAuth(), controller.UpdateAdminUserTokenUsedQuota)
 				adminRoute.GET("/:id", controller.GetUser)
 				adminRoute.POST("/", controller.CreateUser)
 				adminRoute.POST("/manage", controller.ManageUser)

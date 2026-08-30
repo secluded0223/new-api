@@ -39,3 +39,31 @@ func TestMergeTokenConsumptionMovesTotalOnly(t *testing.T) {
 
 	assert.Error(t, MergeTokenConsumption(30, 301, 303))
 }
+
+func TestUpdateTokenUsedQuotaRecalculatesRemainingWithoutChangingTotal(t *testing.T) {
+	require.NoError(t, DB.AutoMigrate(&Token{}))
+	require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Token{}).Error)
+	t.Cleanup(func() {
+		require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Token{}).Error)
+	})
+
+	require.NoError(t, DB.Create(&Token{Id: 401, UserId: 40, Key: "used-quota", Quota: 1000, RemainQuota: 700, UsedQuota: 300, TotalUsedQuota: 1500, Status: common.TokenStatusEnabled}).Error)
+	require.NoError(t, UpdateTokenUsedQuota(40, 401, 600))
+
+	var token Token
+	require.NoError(t, DB.First(&token, 401).Error)
+	assert.Equal(t, 600, token.UsedQuota)
+	assert.Equal(t, 400, token.RemainQuota)
+	assert.Equal(t, int64(1500), token.TotalUsedQuota)
+	assert.Equal(t, common.TokenStatusEnabled, token.Status)
+}
+
+func TestUpdateTokenUsedQuotaRejectsOverQuota(t *testing.T) {
+	require.NoError(t, DB.AutoMigrate(&Token{}))
+	require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Token{}).Error)
+	t.Cleanup(func() {
+		require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Token{}).Error)
+	})
+	require.NoError(t, DB.Create(&Token{Id: 402, UserId: 40, Key: "used-quota-limit", Quota: 1000}).Error)
+	assert.Error(t, UpdateTokenUsedQuota(40, 402, 1001))
+}

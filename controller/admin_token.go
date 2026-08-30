@@ -16,6 +16,10 @@ type adminTokenMergeRequest struct {
 	TargetID int `json:"target_id" binding:"required"`
 }
 
+type adminTokenUsedQuotaRequest struct {
+	UsedQuota *int `json:"used_quota"`
+}
+
 func getAdminTokenTarget(c *gin.Context) (int, error) {
 	userID, err := strconv.Atoi(c.Param("id"))
 	if err != nil || userID <= 0 {
@@ -68,5 +72,33 @@ func MergeAdminUserTokenConsumption(c *gin.Context) {
 		"source_id": request.SourceID,
 		"target_id": request.TargetID,
 	})
+	common.ApiSuccess(c, nil)
+}
+
+func UpdateAdminUserTokenUsedQuota(c *gin.Context) {
+	if c.GetInt("role") != common.RoleRootUser {
+		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
+		return
+	}
+	userID, err := getAdminTokenTarget(c)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	tokenID, err := strconv.Atoi(c.Param("token_id"))
+	if err != nil || tokenID <= 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	var request adminTokenUsedQuotaRequest
+	if err := c.ShouldBindJSON(&request); err != nil || request.UsedQuota == nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	if err := model.UpdateTokenUsedQuota(userID, tokenID, *request.UsedQuota); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	recordManageAuditFor(c, userID, "token.used_quota_update", map[string]interface{}{"id": tokenID, "used_quota": *request.UsedQuota})
 	common.ApiSuccess(c, nil)
 }

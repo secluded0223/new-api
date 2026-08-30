@@ -178,6 +178,18 @@ export async function mergeAdminUserTokenConsumption(
   return res.data
 }
 
+export async function updateAdminUserTokenUsedQuota(
+  userId: number,
+  tokenId: number,
+  usedQuota: number
+): Promise<ApiResponse> {
+  const res = await api.put(
+    `/api/user/${userId}/tokens/${tokenId}/used-quota`,
+    { used_quota: usedQuota }
+  )
+  return res.data
+}
+
 /**
  * Get all available groups
  */
