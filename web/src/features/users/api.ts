@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { ApiKey } from '@/features/keys/types'
 import type { PermissionCatalog } from '@/lib/admin-permissions'
 import { api } from '@/lib/api'
 
@@ -151,6 +152,29 @@ export async function resetUserPasskey(id: number): Promise<ApiResponse> {
  */
 export async function resetUserTwoFA(id: number): Promise<ApiResponse> {
   const res = await api.delete(`/api/user/${id}/2fa`)
+  return res.data
+}
+
+export async function getAdminUserTokens(
+  userId: number
+): Promise<ApiResponse<ApiKey[]>> {
+  // Bust stale 404 responses cached by older development server instances.
+  const res = await api.get(`/api/user/${userId}/tokens`, {
+    params: { fresh: Date.now() },
+    disableDuplicate: true,
+  })
+  return res.data
+}
+
+export async function mergeAdminUserTokenConsumption(
+  userId: number,
+  sourceId: number,
+  targetId: number
+): Promise<ApiResponse> {
+  const res = await api.post(`/api/user/${userId}/tokens/merge`, {
+    source_id: sourceId,
+    target_id: targetId,
+  })
   return res.data
 }
 

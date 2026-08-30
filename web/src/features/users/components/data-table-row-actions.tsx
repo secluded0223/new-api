@@ -28,6 +28,7 @@ import {
   ShieldAlert,
   Link2,
   CreditCard,
+  Key,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -47,6 +48,12 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { UserSubscriptionsDialog } from '@/features/subscriptions/components/dialogs/user-subscriptions-dialog'
+import {
+  ADMIN_PERMISSION_ACTIONS,
+  ADMIN_PERMISSION_RESOURCES,
+  hasPermission,
+} from '@/lib/admin-permissions'
+import { useAuthStore } from '@/stores/auth-store'
 
 import { manageUser, resetUserPasskey, resetUserTwoFA } from '../api'
 import {
@@ -58,6 +65,7 @@ import {
 import { getUserActionMessage } from '../lib'
 import type { User, ManageUserAction } from '../types'
 import { UserBindingDialog } from './dialogs/user-binding-dialog'
+import { UserTokensDialog } from './dialogs/user-tokens-dialog'
 import { useUsers } from './users-provider'
 
 interface DataTableRowActionsProps {
@@ -72,6 +80,8 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const [resetTwoFAOpen, setResetTwoFAOpen] = useState(false)
   const [bindingDialogOpen, setBindingDialogOpen] = useState(false)
   const [subscriptionsDialogOpen, setSubscriptionsDialogOpen] = useState(false)
+  const [tokensDialogOpen, setTokensDialogOpen] = useState(false)
+  const currentUser = useAuthStore((s) => s.auth.user)
 
   const handleEdit = () => {
     setCurrentRow(user)
@@ -134,6 +144,11 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const isDisabled = user.status === USER_STATUS.DISABLED
   const isAdmin = user.role >= USER_ROLE.ADMIN
   const isRoot = user.role === USER_ROLE.ROOT
+  const canViewTokens = hasPermission(
+    currentUser,
+    ADMIN_PERMISSION_RESOURCES.TOKEN,
+    ADMIN_PERMISSION_ACTIONS.READ
+  )
 
   if (isUserDeleted(user)) {
     return null
@@ -209,6 +224,20 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             <Link2 size={16} />
           </DropdownMenuShortcut>
         </DropdownMenuItem>
+
+        {canViewTokens && (
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault()
+              setTokensDialogOpen(true)
+            }}
+          >
+            {t('Manage API Keys')}
+            <DropdownMenuShortcut>
+              <Key size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuItem
           onSelect={(event) => {
@@ -299,6 +328,14 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         open={subscriptionsDialogOpen}
         onOpenChange={setSubscriptionsDialogOpen}
         user={{ id: user.id, username: user.username }}
+        onSuccess={triggerRefresh}
+      />
+
+      <UserTokensDialog
+        open={tokensDialogOpen}
+        onOpenChange={setTokensDialogOpen}
+        userId={user.id}
+        username={user.username}
         onSuccess={triggerRefresh}
       />
     </div>

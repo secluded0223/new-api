@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -10,6 +11,79 @@ import (
 	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
 )
+
+// MergeTokenConsumption transfers the source key's cumulative consumption to
+// the target key. Quota and remaining balance are intentionally untouched.
+// The source key is disabled and its cumulative value cleared so the same
+// consumption is not counted twice in key-level totals.
+func MergeTokenConsumption(userID, sourceID, targetID int) error {
+	if userID <= 0 || sourceID <= 0 || targetID <= 0 || sourceID == targetID {
+		return errors.New("invalid token merge parameters")
+	}
+
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	var tokens []Token
+	if err := lockForUpdate(tx).
+		Where("user_id = ? AND id IN ?", userID, []int{sourceID, targetID}).
+		Find(&tokens).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if len(tokens) != 2 {
+		tx.Rollback()
+		return gorm.ErrRecordNotFound
+	}
+
+	var source, target *Token
+	for i := range tokens {
+		switch tokens[i].Id {
+		case sourceID:
+			source = &tokens[i]
+		case targetID:
+			target = &tokens[i]
+		}
+	}
+	if source == nil || target == nil {
+		tx.Rollback()
+		return gorm.ErrRecordNotFound
+	}
+	if source.TotalUsedQuota < 0 || target.TotalUsedQuota < 0 ||
+		source.TotalUsedQuota > math.MaxInt64-target.TotalUsedQuota {
+		tx.Rollback()
+		return errors.New("token consumption exceeds supported limit")
+	}
+
+	mergedTotal := target.TotalUsedQuota + source.TotalUsedQuota
+	if err := tx.Model(&Token{}).Where("id = ? AND user_id = ?", targetID, userID).
+		Update("total_used_quota", mergedTotal).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := tx.Model(&Token{}).Where("id = ? AND user_id = ?", sourceID, userID).
+		Updates(map[string]interface{}{
+			"total_used_quota": int64(0),
+			"status":           common.TokenStatusDisabled,
+		}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+
+	if common.RedisEnabled {
+		if err := cacheDeleteToken(source.Key); err != nil {
+			common.SysLog("failed to clear source token cache after merge: " + err.Error())
+		}
+		if err := cacheDeleteToken(target.Key); err != nil {
+			common.SysLog("failed to clear target token cache after merge: " + err.Error())
+		}
+	}
+	return nil
+}
 
 type Token struct {
 	Id                 int            `json:"id"`
