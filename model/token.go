@@ -164,6 +164,9 @@ func AllocateTokenQuota(userID int, allocations []TokenQuotaAllocation) error {
 		}
 		keyUsed += int64(token.UsedQuota)
 		if !token.UnlimitedQuota {
+			if _, requestedToken := requested[token.Id]; !requestedToken {
+				continue
+			}
 			byID[token.Id] = token
 		}
 	}
