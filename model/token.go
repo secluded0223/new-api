@@ -117,9 +117,9 @@ type TokenQuotaAllocation struct {
 	Quota   int64
 }
 
-// AllocateTokenQuota distributes a user's unassigned finite quota across keys.
-// The user's wallet and key usage counters are unchanged; only each selected
-// key's configured and remaining quota increase by the allocated amount.
+// AllocateTokenQuota records missing key usage on selected finite keys.
+// The user's wallet and configured key quotas are unchanged; each allocation
+// increases key usage and decreases the same key's remaining quota.
 func AllocateTokenQuota(userID int, allocations []TokenQuotaAllocation) error {
 	if userID <= 0 || len(allocations) == 0 {
 		return errors.New("invalid token quota allocation parameters")
@@ -151,22 +151,19 @@ func AllocateTokenQuota(userID int, allocations []TokenQuotaAllocation) error {
 		return err
 	}
 	byID := make(map[int]*Token, len(tokens))
-	var assigned int64
+	var keyUsed int64
 	for i := range tokens {
 		token := &tokens[i]
-		if token.UnlimitedQuota {
-			continue
-		}
-		if token.UsedQuota < 0 || token.RemainQuota < 0 || token.Quota < 0 {
+		if token.UsedQuota < 0 || token.RemainQuota < 0 || token.Quota < 0 || token.TotalUsedQuota < 0 {
 			tx.Rollback()
 			return errors.New("token quota contains an invalid negative value")
 		}
-		if int64(token.UsedQuota) > math.MaxInt64-assigned-int64(token.RemainQuota) {
+		if int64(token.UsedQuota) > math.MaxInt64-keyUsed {
 			tx.Rollback()
-			return errors.New("assigned token quota exceeds supported limit")
+			return errors.New("key usage exceeds supported limit")
 		}
-		assigned += int64(token.UsedQuota) + int64(token.RemainQuota)
-		if _, ok := requested[token.Id]; ok {
+		keyUsed += int64(token.UsedQuota)
+		if !token.UnlimitedQuota {
 			byID[token.Id] = token
 		}
 	}
@@ -178,7 +175,9 @@ func AllocateTokenQuota(userID int, allocations []TokenQuotaAllocation) error {
 		tx.Rollback()
 		return errors.New("user quota contains an invalid value")
 	}
-	available := int64(user.Quota) + int64(user.UsedQuota) - assigned
+	// User.UsedQuota includes usage from keys that may no longer exist. The
+	// positive difference is the portion that can be recorded on existing keys.
+	available := int64(user.UsedQuota) - keyUsed
 	if available <= 0 {
 		tx.Rollback()
 		return errors.New("no positive quota difference to allocate")
@@ -198,13 +197,14 @@ func AllocateTokenQuota(userID int, allocations []TokenQuotaAllocation) error {
 	maxInt := int64(^uint(0) >> 1)
 	for tokenID, delta := range requested {
 		token := byID[tokenID]
-		if delta > maxInt-int64(token.Quota) || delta > maxInt-int64(token.RemainQuota) {
+		if delta > int64(token.RemainQuota) || delta > maxInt-int64(token.UsedQuota) || delta > math.MaxInt64-token.TotalUsedQuota {
 			tx.Rollback()
-			return errors.New("token allocation exceeds supported limit")
+			return errors.New("token remaining quota is insufficient for allocation")
 		}
 		if err := tx.Model(&Token{}).Where("id = ? AND user_id = ?", tokenID, userID).Updates(map[string]interface{}{
-			"quota":        token.Quota + int(delta),
-			"remain_quota": token.RemainQuota + int(delta),
+			"used_quota":       token.UsedQuota + int(delta),
+			"remain_quota":     token.RemainQuota - int(delta),
+			"total_used_quota": token.TotalUsedQuota + delta,
 		}).Error; err != nil {
 			tx.Rollback()
 			return err

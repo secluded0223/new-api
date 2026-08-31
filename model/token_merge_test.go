@@ -49,26 +49,26 @@ func TestAllocateTokenQuotaDistributesOnlyThePositiveDifference(t *testing.T) {
 		require.NoError(t, DB.Unscoped().Where("id = ?", 501).Delete(&User{}).Error)
 	})
 
-	require.NoError(t, DB.Create(&User{Id: 501, Username: "balance-user", Password: "password", Quota: 3000, UsedQuota: 1000}).Error)
+	require.NoError(t, DB.Create(&User{Id: 501, Username: "balance-user", Password: "password", Quota: 1000, UsedQuota: 1000}).Error)
 	require.NoError(t, DB.Create(&[]Token{
-		{Id: 511, UserId: 501, Key: "balance-a", Quota: 1000, RemainQuota: 900, UsedQuota: 100},
-		{Id: 512, UserId: 501, Key: "balance-b", Quota: 1000, RemainQuota: 800, UsedQuota: 200},
+		{Id: 511, UserId: 501, Key: "balance-a", Quota: 1000, RemainQuota: 900, UsedQuota: 100, TotalUsedQuota: 100},
+		{Id: 512, UserId: 501, Key: "balance-b", Quota: 1000, RemainQuota: 800, UsedQuota: 200, TotalUsedQuota: 200},
 	}).Error)
 
 	require.NoError(t, AllocateTokenQuota(501, []TokenQuotaAllocation{
-		{TokenID: 511, Quota: 1000},
-		{TokenID: 512, Quota: 1000},
+		{TokenID: 511, Quota: 300},
+		{TokenID: 512, Quota: 400},
 	}))
 
 	var first, second Token
 	require.NoError(t, DB.First(&first, 511).Error)
 	require.NoError(t, DB.First(&second, 512).Error)
-	assert.Equal(t, 2000, first.Quota)
-	assert.Equal(t, 1900, first.RemainQuota)
-	assert.Equal(t, 100, first.UsedQuota)
-	assert.Equal(t, 2000, second.Quota)
-	assert.Equal(t, 1800, second.RemainQuota)
-	assert.Equal(t, 200, second.UsedQuota)
+	assert.Equal(t, 1000, first.Quota)
+	assert.Equal(t, 600, first.RemainQuota)
+	assert.Equal(t, 400, first.UsedQuota)
+	assert.Equal(t, 1000, second.Quota)
+	assert.Equal(t, 400, second.RemainQuota)
+	assert.Equal(t, 600, second.UsedQuota)
 }
 
 func TestAllocateTokenQuotaAllowsPartialDifference(t *testing.T) {
@@ -80,13 +80,15 @@ func TestAllocateTokenQuotaAllowsPartialDifference(t *testing.T) {
 		require.NoError(t, DB.Unscoped().Where("id = ?", 502).Delete(&User{}).Error)
 	})
 
-	require.NoError(t, DB.Create(&User{Id: 502, Username: "partial-balance-user", Password: "password", Quota: 2500, UsedQuota: 500}).Error)
-	require.NoError(t, DB.Create(&Token{Id: 521, UserId: 502, Key: "partial-balance", Quota: 1000, RemainQuota: 1000}).Error)
+	require.NoError(t, DB.Create(&User{Id: 502, Username: "partial-balance-user", Password: "password", Quota: 2000, UsedQuota: 1000}).Error)
+	require.NoError(t, DB.Create(&Token{Id: 521, UserId: 502, Key: "partial-balance", Quota: 1000, RemainQuota: 500, UsedQuota: 500, TotalUsedQuota: 500}).Error)
 
 	require.NoError(t, AllocateTokenQuota(502, []TokenQuotaAllocation{{TokenID: 521, Quota: 500}}))
 
 	var token Token
 	require.NoError(t, DB.First(&token, 521).Error)
-	assert.Equal(t, 1500, token.Quota)
-	assert.Equal(t, 1500, token.RemainQuota)
+	assert.Equal(t, 1000, token.Quota)
+	assert.Equal(t, 0, token.RemainQuota)
+	assert.Equal(t, 1000, token.UsedQuota)
+	assert.Equal(t, int64(1000), token.TotalUsedQuota)
 }

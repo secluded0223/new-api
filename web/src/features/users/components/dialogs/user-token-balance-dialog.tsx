@@ -64,20 +64,21 @@ export function UserTokenBalanceDialog(props: UserTokenBalanceDialogProps) {
     () => tokens.filter((token) => !token.unlimited_quota),
     [tokens]
   )
-  const userCreditedQuota = props.user.quota + props.user.used_quota
+  const userTotalQuota = props.user.quota + props.user.used_quota
   const keyUsageSummary = useMemo(
     () =>
-      finiteTokens.reduce(
+      tokens.reduce(
         (summary, token) => ({
           used: summary.used + token.used_quota,
           remaining: summary.remaining + token.remain_quota,
         }),
         { used: 0, remaining: 0 }
       ),
-    [finiteTokens]
+    [tokens]
   )
-  const assignedQuota = keyUsageSummary.used + keyUsageSummary.remaining
-  const difference = userCreditedQuota - assignedQuota
+  // User quota is the current wallet balance. The missing key record is the
+  // user's consumed amount minus usage still present on existing keys.
+  const difference = userTotalQuota - props.user.quota - keyUsageSummary.used
 
   const allocations = useMemo<TokenQuotaAllocation[]>(() => {
     if (difference <= 0 || selectedIds.length === 0) return []
@@ -264,12 +265,16 @@ export function UserTokenBalanceDialog(props: UserTokenBalanceDialogProps) {
         </>
       }
     >
-      <div className='grid gap-2 rounded-md border p-3 text-sm sm:grid-cols-4'>
+      <div className='grid gap-2 rounded-md border p-3 text-sm sm:grid-cols-5'>
+        <div>
+          <div className='text-muted-foreground'>{t('User total quota')}</div>
+          <div className='font-medium'>{formatQuota(userTotalQuota)}</div>
+        </div>
         <div>
           <div className='text-muted-foreground'>
-            {t('User credited quota')}
+            {t('User remaining quota')}
           </div>
-          <div className='font-medium'>{formatQuota(userCreditedQuota)}</div>
+          <div className='font-medium'>{formatQuota(props.user.quota)}</div>
         </div>
         <div>
           <div className='text-muted-foreground'>{t('Key used quota')}</div>
