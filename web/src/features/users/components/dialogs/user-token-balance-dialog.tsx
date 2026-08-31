@@ -70,9 +70,8 @@ export function UserTokenBalanceDialog(props: UserTokenBalanceDialogProps) {
       tokens.reduce(
         (summary, token) => ({
           used: summary.used + token.used_quota,
-          remaining: summary.remaining + token.remain_quota,
         }),
-        { used: 0, remaining: 0 }
+        { used: 0 }
       ),
     [tokens]
   )
@@ -265,7 +264,7 @@ export function UserTokenBalanceDialog(props: UserTokenBalanceDialogProps) {
         </>
       }
     >
-      <div className='grid gap-2 rounded-md border p-3 text-sm sm:grid-cols-5'>
+      <div className='grid gap-2 rounded-md border p-3 text-sm sm:grid-cols-4'>
         <div>
           <div className='text-muted-foreground'>{t('User total quota')}</div>
           <div className='font-medium'>{formatQuota(userTotalQuota)}</div>
@@ -279,14 +278,6 @@ export function UserTokenBalanceDialog(props: UserTokenBalanceDialogProps) {
         <div>
           <div className='text-muted-foreground'>{t('Key used quota')}</div>
           <div className='font-medium'>{formatQuota(keyUsageSummary.used)}</div>
-        </div>
-        <div>
-          <div className='text-muted-foreground'>
-            {t('Key remaining quota')}
-          </div>
-          <div className='font-medium'>
-            {formatQuota(keyUsageSummary.remaining)}
-          </div>
         </div>
         <div>
           <div className='text-muted-foreground'>{t('Difference')}</div>
