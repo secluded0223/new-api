@@ -178,15 +178,18 @@ export async function mergeAdminUserTokenConsumption(
   return res.data
 }
 
-export async function updateAdminUserTokenUsedQuota(
+export interface TokenQuotaAllocation {
+  token_id: number
+  quota: number
+}
+
+export async function allocateAdminUserTokenQuota(
   userId: number,
-  tokenId: number,
-  usedQuota: number
+  allocations: TokenQuotaAllocation[]
 ): Promise<ApiResponse> {
-  const res = await api.put(
-    `/api/user/${userId}/tokens/${tokenId}/used-quota`,
-    { used_quota: usedQuota }
-  )
+  const res = await api.post(`/api/user/${userId}/tokens/balance`, {
+    allocations,
+  })
   return res.data
 }
 

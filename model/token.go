@@ -112,47 +112,112 @@ func MergeTokenConsumption(userID, sourceID, targetID int) error {
 	return nil
 }
 
-// UpdateTokenUsedQuota changes the current-period consumption for one key.
-// The remaining quota is recalculated from the configured quota, while the
-// lifetime consumption total remains unchanged.
-func UpdateTokenUsedQuota(userID, tokenID, usedQuota int) error {
-	if userID <= 0 || tokenID <= 0 || usedQuota < 0 {
-		return errors.New("invalid token quota parameters")
+type TokenQuotaAllocation struct {
+	TokenID int
+	Quota   int64
+}
+
+// AllocateTokenQuota distributes a user's unassigned finite quota across keys.
+// The user's wallet and key usage counters are unchanged; only each selected
+// key's configured and remaining quota increase by the allocated amount.
+func AllocateTokenQuota(userID int, allocations []TokenQuotaAllocation) error {
+	if userID <= 0 || len(allocations) == 0 {
+		return errors.New("invalid token quota allocation parameters")
+	}
+
+	requested := make(map[int]int64, len(allocations))
+	for _, allocation := range allocations {
+		if allocation.TokenID <= 0 || allocation.Quota <= 0 {
+			return errors.New("token allocation must be positive")
+		}
+		if _, exists := requested[allocation.TokenID]; exists {
+			return errors.New("duplicate token allocation")
+		}
+		requested[allocation.TokenID] = allocation.Quota
 	}
 
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return tx.Error
 	}
-	var token Token
-	if err := lockForUpdate(tx).Where("user_id = ? AND id = ?", userID, tokenID).First(&token).Error; err != nil {
+	var user User
+	if err := lockForUpdate(tx).Where("id = ?", userID).First(&user).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
-	if !token.UnlimitedQuota && usedQuota > token.Quota {
-		tx.Rollback()
-		return errors.New("used quota cannot exceed token quota")
-	}
-	remainQuota := 0
-	if token.UnlimitedQuota {
-		remainQuota = token.RemainQuota
-	} else {
-		remainQuota = token.Quota - usedQuota
-	}
-	updates := map[string]interface{}{
-		"used_quota":   usedQuota,
-		"remain_quota": remainQuota,
-	}
-	if err := tx.Model(&Token{}).Where("user_id = ? AND id = ?", userID, tokenID).Updates(updates).Error; err != nil {
+	var tokens []Token
+	if err := lockForUpdate(tx).Where("user_id = ?", userID).Find(&tokens).Error; err != nil {
 		tx.Rollback()
 		return err
+	}
+	byID := make(map[int]*Token, len(tokens))
+	var assigned int64
+	for i := range tokens {
+		token := &tokens[i]
+		if token.UnlimitedQuota {
+			continue
+		}
+		if token.UsedQuota < 0 || token.RemainQuota < 0 || token.Quota < 0 {
+			tx.Rollback()
+			return errors.New("token quota contains an invalid negative value")
+		}
+		if int64(token.UsedQuota) > math.MaxInt64-assigned-int64(token.RemainQuota) {
+			tx.Rollback()
+			return errors.New("assigned token quota exceeds supported limit")
+		}
+		assigned += int64(token.UsedQuota) + int64(token.RemainQuota)
+		if _, ok := requested[token.Id]; ok {
+			byID[token.Id] = token
+		}
+	}
+	if len(byID) != len(requested) {
+		tx.Rollback()
+		return gorm.ErrRecordNotFound
+	}
+	if user.Quota < 0 || user.UsedQuota < 0 || int64(user.Quota) > math.MaxInt64-int64(user.UsedQuota) {
+		tx.Rollback()
+		return errors.New("user quota contains an invalid value")
+	}
+	available := int64(user.Quota) + int64(user.UsedQuota) - assigned
+	if available <= 0 {
+		tx.Rollback()
+		return errors.New("no positive quota difference to allocate")
+	}
+	var allocationTotal int64
+	for _, delta := range requested {
+		if delta > math.MaxInt64-allocationTotal {
+			tx.Rollback()
+			return errors.New("token allocation exceeds supported limit")
+		}
+		allocationTotal += delta
+	}
+	if allocationTotal > available {
+		tx.Rollback()
+		return errors.New("allocation cannot exceed the quota difference")
+	}
+	maxInt := int64(^uint(0) >> 1)
+	for tokenID, delta := range requested {
+		token := byID[tokenID]
+		if delta > maxInt-int64(token.Quota) || delta > maxInt-int64(token.RemainQuota) {
+			tx.Rollback()
+			return errors.New("token allocation exceeds supported limit")
+		}
+		if err := tx.Model(&Token{}).Where("id = ? AND user_id = ?", tokenID, userID).Updates(map[string]interface{}{
+			"quota":        token.Quota + int(delta),
+			"remain_quota": token.RemainQuota + int(delta),
+		}).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
 	}
 	if err := tx.Commit().Error; err != nil {
 		return err
 	}
 	if common.RedisEnabled {
-		if err := cacheDeleteToken(token.Key); err != nil {
-			common.SysLog("failed to clear token cache after used quota update: " + err.Error())
+		for tokenID := range requested {
+			if err := cacheDeleteToken(byID[tokenID].Key); err != nil {
+				common.SysLog("failed to clear token cache after quota allocation: " + err.Error())
+			}
 		}
 	}
 	return nil

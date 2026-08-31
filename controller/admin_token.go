@@ -16,8 +16,13 @@ type adminTokenMergeRequest struct {
 	TargetID int `json:"target_id" binding:"required"`
 }
 
-type adminTokenUsedQuotaRequest struct {
-	UsedQuota *int `json:"used_quota"`
+type adminTokenQuotaAllocation struct {
+	TokenID int   `json:"token_id"`
+	Quota   int64 `json:"quota"`
+}
+
+type adminTokenBalanceRequest struct {
+	Allocations []adminTokenQuotaAllocation `json:"allocations" binding:"required"`
 }
 
 func getAdminTokenTarget(c *gin.Context) (int, error) {
@@ -75,7 +80,7 @@ func MergeAdminUserTokenConsumption(c *gin.Context) {
 	common.ApiSuccess(c, nil)
 }
 
-func UpdateAdminUserTokenUsedQuota(c *gin.Context) {
+func AllocateAdminUserTokenQuota(c *gin.Context) {
 	if c.GetInt("role") != common.RoleRootUser {
 		common.ApiErrorI18n(c, i18n.MsgAuthInsufficientPrivilege)
 		return
@@ -85,20 +90,21 @@ func UpdateAdminUserTokenUsedQuota(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	tokenID, err := strconv.Atoi(c.Param("token_id"))
-	if err != nil || tokenID <= 0 {
+	var request adminTokenBalanceRequest
+	if err := c.ShouldBindJSON(&request); err != nil || len(request.Allocations) == 0 {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
-	var request adminTokenUsedQuotaRequest
-	if err := c.ShouldBindJSON(&request); err != nil || request.UsedQuota == nil {
-		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
-		return
+	allocations := make([]model.TokenQuotaAllocation, len(request.Allocations))
+	for i, allocation := range request.Allocations {
+		allocations[i] = model.TokenQuotaAllocation{TokenID: allocation.TokenID, Quota: allocation.Quota}
 	}
-	if err := model.UpdateTokenUsedQuota(userID, tokenID, *request.UsedQuota); err != nil {
+	if err := model.AllocateTokenQuota(userID, allocations); err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	recordManageAuditFor(c, userID, "token.used_quota_update", map[string]interface{}{"id": tokenID, "used_quota": *request.UsedQuota})
+	recordManageAuditFor(c, userID, "token.balance_allocate", map[string]interface{}{
+		"allocation_count": len(allocations),
+	})
 	common.ApiSuccess(c, nil)
 }

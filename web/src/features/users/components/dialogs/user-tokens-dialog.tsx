@@ -1,4 +1,4 @@
-import { Pencil, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import {
   useCallback,
   useEffect,
@@ -21,13 +21,11 @@ import {
   hasPermission,
 } from '@/lib/admin-permissions'
 import { formatQuota } from '@/lib/format'
-import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
 import {
   getAdminUserTokens,
   mergeAdminUserTokenConsumption,
-  updateAdminUserTokenUsedQuota,
 } from '../../api'
 
 interface UserTokensDialogProps {
@@ -46,15 +44,12 @@ export function UserTokensDialog(props: UserTokensDialogProps) {
     ADMIN_PERMISSION_RESOURCES.TOKEN,
     ADMIN_PERMISSION_ACTIONS.MERGE
   )
-  const isRoot = currentUser?.role === ROLE.SUPER_ADMIN
   const [tokens, setTokens] = useState<ApiKey[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [sourceId, setSourceId] = useState('')
   const [targetId, setTargetId] = useState('')
   const [mergeOpen, setMergeOpen] = useState(false)
-  const [editingUsedQuota, setEditingUsedQuota] = useState<ApiKey | null>(null)
-  const [usedQuotaValue, setUsedQuotaValue] = useState('0')
 
   const loadTokens = useCallback(async () => {
     if (!props.userId) return
@@ -112,39 +107,6 @@ export function UserTokensDialog(props: UserTokensDialogProps) {
     }
   }
 
-  const saveUsedQuota = async () => {
-    if (!props.userId || !editingUsedQuota) return
-    const usedQuota = Number(usedQuotaValue)
-    if (
-      !Number.isInteger(usedQuota) ||
-      usedQuota < 0 ||
-      usedQuota > editingUsedQuota.quota
-    ) {
-      toast.error(t('Invalid quota'))
-      return
-    }
-    setSaving(true)
-    try {
-      const result = await updateAdminUserTokenUsedQuota(
-        props.userId,
-        editingUsedQuota.id,
-        usedQuota
-      )
-      if (!result.success) {
-        toast.error(result.message || t('An unexpected error occurred'))
-        return
-      }
-      toast.success(t('Used quota updated successfully'))
-      setEditingUsedQuota(null)
-      await loadTokens()
-      props.onSuccess?.()
-    } catch {
-      toast.error(t('An unexpected error occurred'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
   let tokenContent: ReactNode
   if (loading) {
     tokenContent = (
@@ -191,19 +153,6 @@ export function UserTokensDialog(props: UserTokensDialogProps) {
                   {formatQuota(token.used_quota)}
                 </span>
               </div>
-              {isRoot && (
-                <Button
-                  variant='ghost'
-                  size='icon-sm'
-                  aria-label={t('Edit used quota')}
-                  onClick={() => {
-                    setEditingUsedQuota(token)
-                    setUsedQuotaValue(String(token.used_quota ?? 0))
-                  }}
-                >
-                  <Pencil className='size-4' />
-                </Button>
-              )}
               <div className='text-muted-foreground text-xs'>
                 {t('Remaining quota')}:{' '}
                 <span className='text-foreground'>
@@ -298,34 +247,6 @@ export function UserTokensDialog(props: UserTokensDialogProps) {
               onClick={() => setMergeOpen(true)}
             >
               {t('Merge consumption')}
-            </Button>
-          </div>
-        )}
-
-        {isRoot && editingUsedQuota && (
-          <div className='mb-4 flex flex-wrap items-end gap-2 rounded-md border p-3'>
-            <div className='flex-1'>
-              <label
-                htmlFor='admin-token-used-quota'
-                className='text-muted-foreground mb-1 block text-xs'
-              >
-                {t('Used quota')}
-              </label>
-              <input
-                id='admin-token-used-quota'
-                type='number'
-                min={0}
-                max={editingUsedQuota.quota}
-                value={usedQuotaValue}
-                onChange={(event) => setUsedQuotaValue(event.target.value)}
-                className='border-input bg-background h-9 w-full rounded-md border px-3 text-sm'
-              />
-            </div>
-            <Button onClick={() => void saveUsedQuota()} disabled={saving}>
-              {t('Save')}
-            </Button>
-            <Button variant='ghost' onClick={() => setEditingUsedQuota(null)}>
-              {t('Cancel')}
             </Button>
           </div>
         )}

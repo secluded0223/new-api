@@ -29,6 +29,7 @@ import {
   Link2,
   CreditCard,
   Key,
+  Scale,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -53,6 +54,7 @@ import {
   ADMIN_PERMISSION_RESOURCES,
   hasPermission,
 } from '@/lib/admin-permissions'
+import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { manageUser, resetUserPasskey, resetUserTwoFA } from '../api'
@@ -65,6 +67,7 @@ import {
 import { getUserActionMessage } from '../lib'
 import type { User, ManageUserAction } from '../types'
 import { UserBindingDialog } from './dialogs/user-binding-dialog'
+import { UserTokenBalanceDialog } from './dialogs/user-token-balance-dialog'
 import { UserTokensDialog } from './dialogs/user-tokens-dialog'
 import { useUsers } from './users-provider'
 
@@ -81,6 +84,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const [bindingDialogOpen, setBindingDialogOpen] = useState(false)
   const [subscriptionsDialogOpen, setSubscriptionsDialogOpen] = useState(false)
   const [tokensDialogOpen, setTokensDialogOpen] = useState(false)
+  const [balanceDialogOpen, setBalanceDialogOpen] = useState(false)
   const currentUser = useAuthStore((s) => s.auth.user)
 
   const handleEdit = () => {
@@ -149,6 +153,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     ADMIN_PERMISSION_RESOURCES.TOKEN,
     ADMIN_PERMISSION_ACTIONS.READ
   )
+  const canReconcileQuota = currentUser?.role === ROLE.SUPER_ADMIN
 
   if (isUserDeleted(user)) {
     return null
@@ -235,6 +240,20 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
             {t('Manage API Keys')}
             <DropdownMenuShortcut>
               <Key size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+        )}
+
+        {canReconcileQuota && (
+          <DropdownMenuItem
+            onSelect={(event) => {
+              event.preventDefault()
+              setBalanceDialogOpen(true)
+            }}
+          >
+            {t('Reconcile quota')}
+            <DropdownMenuShortcut>
+              <Scale size={16} />
             </DropdownMenuShortcut>
           </DropdownMenuItem>
         )}
@@ -338,6 +357,15 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         username={user.username}
         onSuccess={triggerRefresh}
       />
+
+      {canReconcileQuota && (
+        <UserTokenBalanceDialog
+          open={balanceDialogOpen}
+          onOpenChange={setBalanceDialogOpen}
+          user={user}
+          onSuccess={triggerRefresh}
+        />
+      )}
     </div>
   )
 }

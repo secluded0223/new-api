@@ -40,30 +40,53 @@ func TestMergeTokenConsumptionMovesCurrentAndTotalUsage(t *testing.T) {
 	assert.Error(t, MergeTokenConsumption(30, 301, 303))
 }
 
-func TestUpdateTokenUsedQuotaRecalculatesRemainingWithoutChangingTotal(t *testing.T) {
-	require.NoError(t, DB.AutoMigrate(&Token{}))
+func TestAllocateTokenQuotaDistributesOnlyThePositiveDifference(t *testing.T) {
+	require.NoError(t, DB.AutoMigrate(&User{}, &Token{}))
 	require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Token{}).Error)
+	require.NoError(t, DB.Unscoped().Where("id = ?", 501).Delete(&User{}).Error)
 	t.Cleanup(func() {
 		require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Token{}).Error)
+		require.NoError(t, DB.Unscoped().Where("id = ?", 501).Delete(&User{}).Error)
 	})
 
-	require.NoError(t, DB.Create(&Token{Id: 401, UserId: 40, Key: "used-quota", Quota: 1000, RemainQuota: 700, UsedQuota: 300, TotalUsedQuota: 1500, Status: common.TokenStatusEnabled}).Error)
-	require.NoError(t, UpdateTokenUsedQuota(40, 401, 600))
+	require.NoError(t, DB.Create(&User{Id: 501, Username: "balance-user", Password: "password", Quota: 3000, UsedQuota: 1000}).Error)
+	require.NoError(t, DB.Create(&[]Token{
+		{Id: 511, UserId: 501, Key: "balance-a", Quota: 1000, RemainQuota: 900, UsedQuota: 100},
+		{Id: 512, UserId: 501, Key: "balance-b", Quota: 1000, RemainQuota: 800, UsedQuota: 200},
+	}).Error)
 
-	var token Token
-	require.NoError(t, DB.First(&token, 401).Error)
-	assert.Equal(t, 600, token.UsedQuota)
-	assert.Equal(t, 400, token.RemainQuota)
-	assert.Equal(t, int64(1500), token.TotalUsedQuota)
-	assert.Equal(t, common.TokenStatusEnabled, token.Status)
+	require.NoError(t, AllocateTokenQuota(501, []TokenQuotaAllocation{
+		{TokenID: 511, Quota: 1000},
+		{TokenID: 512, Quota: 1000},
+	}))
+
+	var first, second Token
+	require.NoError(t, DB.First(&first, 511).Error)
+	require.NoError(t, DB.First(&second, 512).Error)
+	assert.Equal(t, 2000, first.Quota)
+	assert.Equal(t, 1900, first.RemainQuota)
+	assert.Equal(t, 100, first.UsedQuota)
+	assert.Equal(t, 2000, second.Quota)
+	assert.Equal(t, 1800, second.RemainQuota)
+	assert.Equal(t, 200, second.UsedQuota)
 }
 
-func TestUpdateTokenUsedQuotaRejectsOverQuota(t *testing.T) {
-	require.NoError(t, DB.AutoMigrate(&Token{}))
+func TestAllocateTokenQuotaAllowsPartialDifference(t *testing.T) {
+	require.NoError(t, DB.AutoMigrate(&User{}, &Token{}))
 	require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Token{}).Error)
+	require.NoError(t, DB.Unscoped().Where("id = ?", 502).Delete(&User{}).Error)
 	t.Cleanup(func() {
 		require.NoError(t, DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(&Token{}).Error)
+		require.NoError(t, DB.Unscoped().Where("id = ?", 502).Delete(&User{}).Error)
 	})
-	require.NoError(t, DB.Create(&Token{Id: 402, UserId: 40, Key: "used-quota-limit", Quota: 1000}).Error)
-	assert.Error(t, UpdateTokenUsedQuota(40, 402, 1001))
+
+	require.NoError(t, DB.Create(&User{Id: 502, Username: "partial-balance-user", Password: "password", Quota: 2500, UsedQuota: 500}).Error)
+	require.NoError(t, DB.Create(&Token{Id: 521, UserId: 502, Key: "partial-balance", Quota: 1000, RemainQuota: 1000}).Error)
+
+	require.NoError(t, AllocateTokenQuota(502, []TokenQuotaAllocation{{TokenID: 521, Quota: 500}}))
+
+	var token Token
+	require.NoError(t, DB.First(&token, 521).Error)
+	assert.Equal(t, 1500, token.Quota)
+	assert.Equal(t, 1500, token.RemainQuota)
 }
