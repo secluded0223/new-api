@@ -202,10 +202,33 @@ export function UserTokenBalanceDialog(props: UserTokenBalanceDialogProps) {
                   }
                   aria-label={token.name}
                 />
-                <div className='min-w-[150px] flex-1'>
+                <div className='min-w-0 flex-1 space-y-2'>
                   <div className='font-medium'>{token.name}</div>
-                  <div className='text-muted-foreground text-xs'>
-                    {t('Current quota')}: {formatQuota(token.quota)}
+                  <div className='grid gap-x-4 gap-y-1 text-xs sm:grid-cols-3'>
+                    <div>
+                      <span className='text-muted-foreground'>
+                        {t('Current quota')}:
+                      </span>{' '}
+                      <span className='font-medium'>
+                        {formatQuota(token.quota)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className='text-muted-foreground'>
+                        {t('Used quota')}:
+                      </span>{' '}
+                      <span className='font-medium'>
+                        {formatQuota(token.used_quota)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className='text-muted-foreground'>
+                        {t('Remaining quota')}:
+                      </span>{' '}
+                      <span className='font-medium'>
+                        {formatQuota(token.remain_quota)}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 {allocationValue}

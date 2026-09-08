@@ -242,6 +242,7 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			tokenRoute.GET("/", controller.GetAllTokens)
 			tokenRoute.GET("/search", middleware.SearchRateLimit(), controller.SearchTokens)
+			tokenRoute.GET("/ranking", controller.GetUserTokenUsageRanking)
 			tokenRoute.POST("/reorder", controller.ReorderToken)
 			tokenRoute.GET("/:id", controller.GetToken)
 			tokenRoute.POST("/:id/key", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.GetTokenKey)
@@ -283,6 +284,7 @@ func SetApiRouter(router *gin.Engine) {
 		ledgerRoute.Use(middleware.AdminAuth())
 		{
 			ledgerRoute.GET("", controller.GetLedger)
+			ledgerRoute.GET("/monthly", controller.GetLedgerMonthly)
 			ledgerRoute.POST("/expenses", controller.CreateLedgerExpense)
 		}
 		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), controller.GetChannelAffinityUsageCacheStats)

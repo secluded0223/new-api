@@ -137,3 +137,51 @@ func TestGetLedgerSummaryKeepsTrendRevenueConsistentWithTotalRounding(t *testing
 	}
 	assert.EqualValues(t, summary.RevenueCents, trendRevenue)
 }
+
+func TestGetLedgerMonthlySummaryReturnsTwelveMonthsAndAggregatesByLocalMonth(t *testing.T) {
+	previousDB, previousLogDB := DB, LOG_DB
+	previousMainDatabaseType, previousLogDatabaseType := common.MainDatabaseType(), common.LogDatabaseType()
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	require.NoError(t, err)
+	DB, LOG_DB = db, db
+	require.NoError(t, db.AutoMigrate(&Log{}, &LedgerExpense{}))
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		DB, LOG_DB = previousDB, previousLogDB
+		common.SetDatabaseTypes(previousMainDatabaseType, previousLogDatabaseType)
+		_ = sqlDB.Close()
+	})
+
+	year := 2026
+	jan := time.Date(year, time.January, 10, 12, 0, 0, 0, time.Local).Unix()
+	mar := time.Date(year, time.March, 10, 12, 0, 0, 0, time.Local).Unix()
+	dec := time.Date(year, time.December, 10, 12, 0, 0, 0, time.Local).Unix()
+	quotaPerDollar := int(common.QuotaPerUnit)
+	require.NoError(t, db.Create(&[]Log{
+		{CreatedAt: jan, Type: LogTypeConsume, Quota: quotaPerDollar},
+		{CreatedAt: mar, Type: LogTypeConsume, Quota: 2 * quotaPerDollar},
+		{CreatedAt: mar, Type: LogTypeRefund, Quota: quotaPerDollar / 2},
+		{CreatedAt: dec, Type: LogTypeConsume, Quota: quotaPerDollar / 4},
+	}).Error)
+	require.NoError(t, db.Create(&[]LedgerExpense{
+		{OccurredAt: jan, Category: "upstream_recharge", Amount: 25, Currency: "USD"},
+		{OccurredAt: mar, Category: "upstream_recharge", Amount: 75, Currency: "USD"},
+		{OccurredAt: mar, Category: "other", Amount: 100, Currency: "CNY"},
+	}).Error)
+
+	summary, err := GetLedgerMonthlySummary(year)
+	require.NoError(t, err)
+	require.Len(t, summary.Months, 12)
+	assert.EqualValues(t, 275, summary.RevenueCents)
+	assert.EqualValues(t, 100, summary.Expenses)
+	assert.EqualValues(t, 175, summary.Profit)
+	assert.EqualValues(t, 100, summary.Months[0].RevenueCents)
+	assert.EqualValues(t, 25, summary.Months[0].ExpenseCents)
+	assert.EqualValues(t, 150, summary.Months[2].RevenueCents)
+	assert.EqualValues(t, 75, summary.Months[2].ExpenseCents)
+	assert.EqualValues(t, 0, summary.Months[1].RevenueCents)
+	assert.EqualValues(t, 25, summary.Months[11].RevenueCents)
+}

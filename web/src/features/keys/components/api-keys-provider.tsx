@@ -24,7 +24,7 @@ import useDialogState from '@/hooks/use-dialog'
 
 import { fetchTokenKey, fetchTokenKeysBatch } from '../api'
 import { ERROR_MESSAGES } from '../constants'
-import { type ApiKey, type ApiKeysDialogType } from '../types'
+import type { ApiKey, ApiKeysDialogType } from '../types'
 
 type ApiKeysContextType = {
   open: ApiKeysDialogType | null
@@ -41,6 +41,8 @@ type ApiKeysContextType = {
   loadingKeys: Record<number, boolean>
   copiedKeyId: number | null
   markKeyCopied: (id: number) => void
+  selectedApiKeyIds: number[]
+  setSelectedApiKeyIds: React.Dispatch<React.SetStateAction<number[]>>
 }
 
 const ApiKeysContext = React.createContext<ApiKeysContextType | null>(null)
@@ -57,6 +59,7 @@ export function ApiKeysProvider({ children }: { children: React.ReactNode }) {
   const pendingRequests = useRef<Record<number, Promise<string | null>>>({})
 
   const [copiedKeyId, setCopiedKeyId] = useState<number | null>(null)
+  const [selectedApiKeyIds, setSelectedApiKeyIds] = useState<number[]>([])
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   useEffect(() => {
@@ -171,6 +174,8 @@ export function ApiKeysProvider({ children }: { children: React.ReactNode }) {
         loadingKeys,
         copiedKeyId,
         markKeyCopied,
+        selectedApiKeyIds,
+        setSelectedApiKeyIds,
       }}
     >
       {children}

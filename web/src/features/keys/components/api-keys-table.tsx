@@ -63,8 +63,8 @@ import {
 } from '../constants'
 import { getApiKeyQuotaSummary } from '../lib/api-key-quota'
 import type { ApiKey } from '../types'
-import { ApiKeyCell, UnlimitedQuotaBadge } from './api-keys-cells'
 import { ApiKeyDragHandle } from './api-key-drag-handle'
+import { ApiKeyCell, UnlimitedQuotaBadge } from './api-keys-cells'
 import { useApiKeysColumns } from './api-keys-columns'
 import { ApiKeysGroupSwitcher } from './api-keys-group-switcher'
 import { useApiKeys } from './api-keys-provider'
@@ -226,7 +226,7 @@ function ApiKeysMobileList({
 
 export function ApiKeysTable() {
   const { t } = useTranslation()
-  const { refreshTrigger, triggerRefresh } = useApiKeys()
+  const { refreshTrigger, triggerRefresh, setSelectedApiKeyIds } = useApiKeys()
   const [now, setNow] = useState(() => Date.now())
   const columns = useApiKeysColumns(now)
 
@@ -318,6 +318,7 @@ export function ApiKeysTable() {
     data: apiKeys,
     columns,
     enableRowSelection: true,
+    getRowId: (row) => String(row.id),
     columnFilters,
     columnVisibilityStorageKey: API_KEYS_COLUMN_VISIBILITY_STORAGE_KEY,
     globalFilter,
@@ -330,6 +331,11 @@ export function ApiKeysTable() {
     totalCount: data?.total || 0,
     ensurePageInRange,
   })
+  const rowSelection = table.getState().rowSelection
+
+  useEffect(() => {
+    setSelectedApiKeyIds(Object.keys(rowSelection).map((id) => Number(id)))
+  }, [rowSelection, setSelectedApiKeyIds])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })

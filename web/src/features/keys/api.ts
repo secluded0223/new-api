@@ -40,6 +40,30 @@ export async function getApiKeys(
   return res.data
 }
 
+// Fetch every API key owned by the current user for export.
+export async function getAllApiKeys(): Promise<ApiKey[]> {
+  const pageSize = 100
+  const items: ApiKey[] = []
+  let page = 1
+  let total = 0
+
+  do {
+    const result = await getApiKeys({ p: page, size: pageSize })
+    if (!result.success) {
+      throw new Error(result.message || 'Failed to load API keys')
+    }
+
+    const pageItems = result.data?.items ?? []
+    items.push(...pageItems)
+    total = result.data?.total ?? items.length
+    page += 1
+
+    if (pageItems.length === 0) break
+  } while (items.length < total)
+
+  return items
+}
+
 // Search API keys by keyword or token (with pagination)
 export async function searchApiKeys(
   params: SearchApiKeysParams

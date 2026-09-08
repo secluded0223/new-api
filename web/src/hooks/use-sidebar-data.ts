@@ -30,13 +30,14 @@ import {
   ServerCog,
   Settings,
   Ticket,
+  Trophy,
   User,
   Users,
   Wallet,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { type SidebarData } from '@/components/layout/types'
+import type { SidebarData } from '@/components/layout/types'
 import { ROLE } from '@/lib/roles'
 
 /**
@@ -84,6 +85,11 @@ export function useSidebarData(): SidebarData {
             title: t('API Keys'),
             url: '/keys',
             icon: Key,
+          },
+          {
+            title: t('Token Rankings'),
+            url: '/token-ranking',
+            icon: Trophy,
           },
           {
             title: t('Usage Logs'),

@@ -22,6 +22,24 @@ func GetLedger(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": summary})
 }
 
+func GetLedgerMonthly(c *gin.Context) {
+	year := time.Now().Year()
+	if value := c.Query("year"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 1970 || parsed > 2100 {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "年份无效"})
+			return
+		}
+		year = parsed
+	}
+	summary, err := model.GetLedgerMonthlySummary(year)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": summary})
+}
+
 func CreateLedgerExpense(c *gin.Context) {
 	var input model.LedgerExpenseInput
 	if err := common.DecodeJson(c.Request.Body, &input); err != nil {
