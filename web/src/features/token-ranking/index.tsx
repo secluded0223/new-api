@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { formatNumber } from '@/lib/format'
+import { formatNumber, formatQuota } from '@/lib/format'
 import { api } from '@/lib/api'
 
 type RankingPeriod = 'daily' | 'weekly' | 'monthly' | 'total'
@@ -81,6 +81,7 @@ export function TokenRanking() {
             <TableHead className='w-20'>{t('Rank')}</TableHead>
             <TableHead>{t('API Key')}</TableHead>
             <TableHead className='text-right'>{t('Tokens used')}</TableHead>
+            <TableHead className='text-right'>{t('Cost')}</TableHead>
             <TableHead className='text-right'>{t('Requests')}</TableHead>
           </TableRow>
         </TableHeader>
@@ -96,6 +97,9 @@ export function TokenRanking() {
               </TableCell>
               <TableCell className='text-right font-mono tabular-nums'>
                 {formatNumber(row.tokens)}
+              </TableCell>
+              <TableCell className='text-right font-mono tabular-nums'>
+                {formatQuota(row.quota)}
               </TableCell>
               <TableCell className='text-right font-mono tabular-nums'>
                 {formatNumber(row.requests)}
