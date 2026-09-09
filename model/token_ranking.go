@@ -1,6 +1,7 @@
 package model
 
 import (
+	"sort"
 	"time"
 )
 
@@ -21,47 +22,53 @@ type TokenUsageRanking struct {
 	Total   []*TokenUsageRankingItem `json:"total"`
 }
 
-func getTokenUsageRanking(userID int, startTimestamp int64) ([]*TokenUsageRankingItem, error) {
-	rows := make([]*TokenUsageRankingItem, 0)
+func getTokenUsageRanking(userID int, tokens []*Token, startTimestamp int64, useCurrentTotal bool) ([]*TokenUsageRankingItem, error) {
+	rows := make([]*TokenUsageRankingItem, 0, len(tokens))
+	if len(tokens) == 0 {
+		return rows, nil
+	}
+
+	tokenIDs := make([]int, 0, len(tokens))
+	for _, token := range tokens {
+		tokenIDs = append(tokenIDs, token.Id)
+	}
+
+	usageRows := make([]*TokenUsageRankingItem, 0, len(tokens))
 	query := LOG_DB.Table("logs").
-		Select("token_id, MAX(token_name) AS token_name, COALESCE(SUM(prompt_tokens), 0) + COALESCE(SUM(completion_tokens), 0) AS tokens, COALESCE(SUM(quota), 0) AS quota, COUNT(*) AS requests").
-		Where("user_id = ? AND type = ? AND token_id > ?", userID, LogTypeConsume, 0).
-		Group("token_id").
-		Order("tokens DESC, token_id ASC")
+		Select("token_id, COALESCE(SUM(prompt_tokens), 0) + COALESCE(SUM(completion_tokens), 0) AS tokens, COALESCE(SUM(quota), 0) AS quota, COUNT(*) AS requests").
+		Where("user_id = ? AND type = ? AND token_id IN ?", userID, LogTypeConsume, tokenIDs).
+		Group("token_id")
 	if startTimestamp > 0 {
 		query = query.Where("created_at >= ?", startTimestamp)
 	}
-	if err := query.Find(&rows).Error; err != nil {
+	if err := query.Find(&usageRows).Error; err != nil {
 		return nil, err
 	}
 
-	// Prefer the current name when the log snapshot is empty. Deleted keys keep
-	// their historical snapshot and are rendered by the client using their ID.
-	tokenIDs := make([]int, 0, len(rows))
-	for _, row := range rows {
-		if row.TokenName == "" {
-			tokenIDs = append(tokenIDs, row.TokenID)
-		}
+	usageByTokenID := make(map[int]*TokenUsageRankingItem, len(usageRows))
+	for _, row := range usageRows {
+		usageByTokenID[row.TokenID] = row
 	}
-	if len(tokenIDs) == 0 {
-		return rows, nil
-	}
-	var tokens []struct {
-		ID   int    `gorm:"column:id"`
-		Name string `gorm:"column:name"`
-	}
-	if err := DB.Model(&Token{}).Select("id, name").Where("user_id = ? AND id IN ?", userID, tokenIDs).Find(&tokens).Error; err != nil {
-		return nil, err
-	}
-	names := make(map[int]string, len(tokens))
 	for _, token := range tokens {
-		names[token.ID] = token.Name
-	}
-	for _, row := range rows {
-		if row.TokenName == "" {
-			row.TokenName = names[row.TokenID]
+		row := usageByTokenID[token.Id]
+		if row == nil {
+			row = &TokenUsageRankingItem{TokenID: token.Id}
 		}
+		row.TokenName = token.Name
+		if useCurrentTotal {
+			row.Quota = token.TotalUsedQuota
+		}
+		rows = append(rows, row)
 	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		if rows[i].Quota != rows[j].Quota {
+			return rows[i].Quota > rows[j].Quota
+		}
+		if rows[i].Tokens != rows[j].Tokens {
+			return rows[i].Tokens > rows[j].Tokens
+		}
+		return rows[i].TokenID < rows[j].TokenID
+	})
 	return rows, nil
 }
 
@@ -80,20 +87,24 @@ func GetUserTokenUsageRanking(userID int) (TokenUsageRanking, error) {
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local).Unix()
 	weekStart := time.Unix(todayStart, 0).In(time.Local).AddDate(0, 0, -6).Unix()
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local).Unix()
+	var tokens []*Token
+	if err := DB.Select("id, name, total_used_quota").Where("user_id = ?", userID).Find(&tokens).Error; err != nil {
+		return TokenUsageRanking{}, err
+	}
 
-	daily, err := getTokenUsageRanking(userID, todayStart)
+	daily, err := getTokenUsageRanking(userID, tokens, todayStart, false)
 	if err != nil {
 		return TokenUsageRanking{}, err
 	}
-	weekly, err := getTokenUsageRanking(userID, weekStart)
+	weekly, err := getTokenUsageRanking(userID, tokens, weekStart, false)
 	if err != nil {
 		return TokenUsageRanking{}, err
 	}
-	monthly, err := getTokenUsageRanking(userID, monthStart)
+	monthly, err := getTokenUsageRanking(userID, tokens, monthStart, false)
 	if err != nil {
 		return TokenUsageRanking{}, err
 	}
-	total, err := getTokenUsageRanking(userID, 0)
+	total, err := getTokenUsageRanking(userID, tokens, 0, true)
 	if err != nil {
 		return TokenUsageRanking{}, err
 	}
